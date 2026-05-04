@@ -1,0 +1,49 @@
+import { NextRequest, NextResponse } from 'next/server';
+import connectDB from '@/lib/mongodb';
+import Asset from '@/models/Asset';
+
+// GET /api/assets - Get all assets
+export async function GET(request: NextRequest) {
+  try {
+    await connectDB();
+    
+    const { searchParams } = new URL(request.url);
+    const status = searchParams.get('status');
+    const type = searchParams.get('type');
+    const assignedTo = searchParams.get('assignedTo');
+    
+    const query: any = {};
+    if (status) query.status = status;
+    if (type) query.type = type;
+    if (assignedTo) query.assignedTo = assignedTo;
+    
+    const assets = await Asset.find(query)
+      .populate('assignedTo', 'firstName lastName')
+      .sort({ createdAt: -1 });
+    
+    return NextResponse.json({ success: true, data: assets });
+  } catch (error) {
+    return NextResponse.json(
+      { success: false, error: 'Failed to fetch assets' },
+      { status: 500 }
+    );
+  }
+}
+
+// POST /api/assets - Create new asset
+export async function POST(request: NextRequest) {
+  try {
+    await connectDB();
+    const body = await request.json();
+    
+    const asset = await Asset.create(body);
+    await asset.populate('assignedTo');
+    
+    return NextResponse.json({ success: true, data: asset }, { status: 201 });
+  } catch (error) {
+    return NextResponse.json(
+      { success: false, error: 'Failed to create asset' },
+      { status: 500 }
+    );
+  }
+}

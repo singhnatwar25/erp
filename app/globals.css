@@ -1,0 +1,184 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  /* Dark Theme Colors from Design */
+  --bg-primary: #191E2C;
+  --bg-secondary: #1E2538;
+  --bg-card: #252B3D;
+  --bg-hover: #2D3549;
+  
+  /* Accent Colors */
+  --accent-lime: #B9FF66;
+  --accent-purple: #BC5FCF;
+  --accent-sky: #459BBE;
+  --accent-orange: #DC6F31;
+  --accent-coral: #C55050;
+  --accent-blue: #3D55B6;
+  --accent-green: #4E956A;
+  
+  /* Text Colors */
+  --text-primary: #FFFFFF;
+  --text-secondary: #94A3B8;
+  --text-muted: #64748B;
+}
+
+@layer base {
+  * {
+    @apply border-white/10;
+  }
+  
+  body {
+    @apply bg-[#191E2C] text-white antialiased;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  }
+  
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-semibold tracking-tight text-white;
+  }
+}
+
+@layer components {
+  /* Navigation Pills */
+  .nav-pill {
+    @apply inline-flex items-center gap-2 px-5 py-2.5 rounded-full text-sm font-medium transition-all duration-200;
+    @apply bg-[#252B3D] text-[#94A3B8] hover:bg-[#2D3549] hover:text-white;
+  }
+  
+  .nav-pill-active {
+    @apply nav-pill bg-[#B9FF66] text-[#191E2C] hover:bg-[#a8f055];
+  }
+  
+  /* Cards */
+  .card-dark {
+    @apply bg-[#252B3D] rounded-3xl border border-white/5;
+  }
+  
+  .card-hover {
+    @apply card-dark hover:bg-[#2D3549] transition-all duration-300 cursor-pointer;
+  }
+  
+  /* Project Cards with Colors */
+  .project-card {
+    @apply relative rounded-2xl p-5 overflow-hidden transition-all duration-300 hover:scale-[1.02] hover:shadow-2xl;
+  }
+  
+  .project-card-blue { @apply project-card bg-[#3D55B6]; }
+  .project-card-orange { @apply project-card bg-[#DC6F31]; }
+  .project-card-purple { @apply project-card bg-[#BC5FCF]; }
+  .project-card-green { @apply project-card bg-[#4E956A]; }
+  .project-card-coral { @apply project-card bg-[#C55050]; }
+  .project-card-sky { @apply project-card bg-[#459BBE]; }
+  .project-card-lime { @apply project-card bg-[#B9FF66] text-[#191E2C]; }
+  
+  /* Buttons */
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-full font-medium transition-all duration-200;
+  }
+  
+  .btn-lime {
+    @apply btn bg-[#B9FF66] text-[#191E2C] hover:bg-[#a8f055] shadow-lg shadow-[#B9FF66]/20;
+  }
+  
+  .btn-dark {
+    @apply btn bg-[#252B3D] text-white hover:bg-[#2D3549] border border-white/10;
+  }
+  
+  .btn-ghost {
+    @apply btn bg-transparent text-[#94A3B8] hover:text-white hover:bg-white/5;
+  }
+  
+  /* Stats Display */
+  .stat-display {
+    @apply flex items-center gap-3;
+  }
+  
+  .stat-icon {
+    @apply w-10 h-10 rounded-xl flex items-center justify-center bg-[#252B3D] border border-white/10;
+  }
+  
+  .stat-value {
+    @apply text-2xl font-bold text-white;
+  }
+  
+  .stat-label {
+    @apply text-xs text-[#64748B];
+  }
+  
+  /* Trend Badge */
+  .trend-badge {
+    @apply inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium;
+    @apply bg-[#B9FF66]/20 text-[#B9FF66];
+  }
+  
+  /* Calendar Widget */
+  .calendar-day {
+    @apply w-10 h-10 rounded-xl flex items-center justify-center text-sm font-medium transition-all;
+    @apply bg-[#252B3D] text-[#94A3B8] hover:bg-[#2D3549] hover:text-white;
+  }
+  
+  .calendar-day-active {
+    @apply calendar-day bg-[#B9FF66] text-[#191E2C] hover:bg-[#a8f055];
+  }
+  
+  .calendar-day-has-event {
+    @apply calendar-day border-2 border-[#B9FF66]/50;
+  }
+  
+  /* Input Dark */
+  .input-dark {
+    @apply w-full px-4 py-3 bg-[#252B3D] border border-white/10 rounded-xl text-white placeholder-[#64748B];
+    @apply focus:outline-none focus:ring-2 focus:ring-[#B9FF66]/30 focus:border-[#B9FF66]/50 transition-all;
+  }
+  
+  /* Avatar Group */
+  .avatar-group {
+    @apply flex -space-x-2;
+  }
+  
+  .avatar {
+    @apply w-8 h-8 rounded-full border-2 border-[#252B3D] bg-[#3D55B6] flex items-center justify-center text-xs font-medium text-white;
+  }
+  
+  /* Badge Dark */
+  .badge-dark {
+    @apply inline-flex items-center px-3 py-1 rounded-full text-xs font-medium;
+    @apply bg-white/10 text-white/80 backdrop-blur-sm;
+  }
+  
+  /* Tag Colors */
+  .tag-finance { @apply badge-dark bg-[#3D55B6]/30 text-[#8BA4FF]; }
+  .tag-education { @apply badge-dark bg-[#DC6F31]/30 text-[#FFB088]; }
+  .tag-healthcare { @apply badge-dark bg-[#4E956A]/30 text-[#8FD9B0]; }
+  .tag-travel { @apply badge-dark bg-[#C55050]/30 text-[#FF9B9B]; }
+  .tag-logistics { @apply badge-dark bg-[#459BBE]/30 text-[#8DD4F0]; }
+  
+  /* Scrollbar Dark */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  
+  ::-webkit-scrollbar-track {
+    @apply bg-[#191E2C] rounded-full;
+  }
+  
+  ::-webkit-scrollbar-thumb {
+    @apply bg-[#3D55B6] rounded-full hover:bg-[#4A63C8] transition-colors;
+  }
+  
+  /* Animations */
+  .animate-pulse-slow {
+    animation: pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  }
+  
+  .animate-float {
+    animation: float 6s ease-in-out infinite;
+  }
+  
+  @keyframes float {
+    0%, 100% { transform: translateY(0px); }
+    50% { transform: translateY(-10px); }
+  }
+}
