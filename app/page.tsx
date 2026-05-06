@@ -16,6 +16,7 @@ import {
   Filter,
   Briefcase,
   TrendingUp,
+  TrendingDown,
   DollarSign,
   PieChart,
   CheckSquare,
@@ -50,107 +51,6 @@ interface RecentActivity {
   date: string;
   amount?: number;
 }
-
-// Projects Data with Vibrant Colors
-const projects: Project[] = [
-  {
-    id: '1',
-    tag: 'Finance',
-    tagClass: 'tag-finance',
-    name: 'Decem App',
-    tasks: 988,
-    budget: 391991,
-    team: ['JD', 'AS', 'MK'],
-    extraMembers: 12,
-    color: 'project-card-blue'
-  },
-  {
-    id: '2',
-    tag: 'Education',
-    tagClass: 'tag-education',
-    name: 'SkyLux',
-    tasks: 12,
-    budget: 51792,
-    team: ['RK', 'PL', 'TM'],
-    color: 'project-card-orange'
-  },
-  {
-    id: '3',
-    tag: 'Finance',
-    tagClass: 'tag-finance',
-    name: 'DushMash',
-    tasks: 32,
-    budget: 31955,
-    team: ['AS', 'JD'],
-    color: 'project-card-purple'
-  },
-  {
-    id: '4',
-    tag: 'Healthcare',
-    tagClass: 'tag-healthcare',
-    name: 'Biofarm',
-    tasks: 19,
-    budget: 11538,
-    team: ['MK', 'RK'],
-    extraMembers: 4,
-    color: 'project-card-green'
-  },
-  {
-    id: '5',
-    tag: 'Travel',
-    tagClass: 'tag-travel',
-    name: 'PAD move',
-    tasks: 35,
-    budget: 21688,
-    team: ['PL', 'TM', 'AS'],
-    extraMembers: 2,
-    color: 'project-card-coral'
-  },
-  {
-    id: '6',
-    tag: 'Logistics',
-    tagClass: 'tag-logistics',
-    name: 'Getstats',
-    tasks: 88,
-    budget: 92581,
-    team: ['JD', 'MK', 'RK'],
-    color: 'project-card-sky'
-  },
-];
-
-// Calendar Data
-const calendarDays = [
-  { day: 1, hasEvent: false },
-  { day: 2, hasEvent: true, members: ['JD', 'AS'] },
-  { day: 3, hasEvent: false },
-  { day: 4, hasEvent: true, members: ['MK'], active: true },
-  { day: 5, hasEvent: false },
-  { day: 6, hasEvent: false },
-  { day: 7, hasEvent: false },
-  { day: 8, hasEvent: false },
-  { day: 9, hasEvent: true, members: ['RK', 'PL'] },
-  { day: 10, hasEvent: true, members: ['TM'] },
-  { day: 11, hasEvent: true, members: ['AS', 'JD', 'MK'] },
-  { day: 12, hasEvent: false },
-  { day: 13, hasEvent: false },
-  { day: 14, hasEvent: true, members: ['RK'] },
-  { day: 15, hasEvent: true, members: ['PL', 'TM'] },
-  { day: 16, hasEvent: false },
-  { day: 17, hasEvent: true, members: ['JD'] },
-  { day: 18, hasEvent: false },
-  { day: 19, hasEvent: false },
-  { day: 20, hasEvent: true, members: ['AS', 'RK'] },
-  { day: 21, hasEvent: false },
-  { day: 22, hasEvent: false },
-  { day: 23, hasEvent: true, members: ['MK', 'PL'], active: true },
-  { day: 24, hasEvent: true, members: ['TM', 'JD', 'AS'] },
-  { day: 25, hasEvent: false },
-  { day: 26, hasEvent: false },
-  { day: 27, hasEvent: false },
-  { day: 28, hasEvent: true, members: ['RK'] },
-  { day: 29, hasEvent: true, members: ['PL', 'TM'] },
-  { day: 30, hasEvent: true, members: ['JD', 'MK'] },
-];
 
 const formatCurrency = (amount: number) => {
   return new Intl.NumberFormat('en-US', {
@@ -188,9 +88,16 @@ export default function Dashboard() {
     netProfit: 0,
     newHires: 0,
     departments: 0,
+    totalTasks: 0,
+    todoTasks: 0,
+    inProgressTasks: 0,
+    reviewTasks: 0,
+    doneTasks: 0,
   });
   const [activities, setActivities] = useState<RecentActivity[]>([]);
   const [departmentData, setDepartmentData] = useState<{name: string, count: number}[]>([]);
+  const [recentTasks, setRecentTasks] = useState<any[]>([]);
+  const [recentProjects, setRecentProjects] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
   const fetchDashboardData = useCallback(async () => {
@@ -201,6 +108,8 @@ export default function Dashboard() {
         setStats(data.data.stats);
         setActivities(data.data.activities);
         setDepartmentData(data.data.departmentData);
+        setRecentTasks(data.data.recentTasks || []);
+        setRecentProjects(data.data.recentProjects || []);
       }
     } catch (error) {
       console.error('Error fetching dashboard data:', error);
@@ -244,7 +153,6 @@ export default function Dashboard() {
               <div className="w-10 h-10 rounded-xl bg-[#B9FF66] flex items-center justify-center">
                 <LayoutDashboard className="h-5 w-5 text-[#191E2C]" />
               </div>
-              <span className="text-xl font-bold text-white">Nexus</span>
             </div>
 
             {/* Nav Pills */}
@@ -319,171 +227,293 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* Projects Section */}
-        <div className="mb-8">
-          <div className="flex items-center justify-between mb-6">
-            <div className="flex items-center gap-4">
-              <h2 className="text-2xl font-bold text-white">Projects</h2>
-              <span className="px-3 py-1 rounded-full bg-[#252B3D] text-[#94A3B8] text-sm font-medium border border-white/10">
-                {String(stats.projects).padStart(2, '0')}
-              </span>
+        {/* Stats Row - Colorful Cards */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+          <div className="bg-[#4E956A] rounded-3xl p-5 h-[120px] flex flex-col justify-between text-white hover:scale-[1.02] transition-transform">
+            <div className="flex items-start justify-between">
+              <span className="text-white/70 text-sm font-medium">New hires</span>
+              <div className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center">
+                <TrendingUp className="h-4 w-4 text-white" />
+              </div>
             </div>
-            <div className="flex items-center gap-2">
-              <button className="w-10 h-10 rounded-xl bg-[#252B3D] flex items-center justify-center text-[#94A3B8] hover:text-white transition-colors border border-white/10">
-                <MoreHorizontal className="h-5 w-5" />
-              </button>
-              <button className="w-10 h-10 rounded-xl bg-[#252B3D] flex items-center justify-center text-[#94A3B8] hover:text-white transition-colors border border-white/10">
-                <Filter className="h-5 w-5" />
-              </button>
-              <button className="w-10 h-10 rounded-xl bg-[#B9FF66] flex items-center justify-center text-[#191E2C] hover:bg-[#a8f055] transition-colors">
-                <ArrowUpRight className="h-5 w-5" />
-              </button>
+            <div>
+              <p className="text-3xl font-bold">+1</p>
+              <p className="text-white/70 text-sm">this month</p>
             </div>
           </div>
-
-          {/* Projects Grid */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 mb-6">
-            {/* Add New Project Card */}
-            <Link href="/projects" className="project-card bg-[#252B3D] border border-dashed border-white/20 flex flex-col items-center justify-center min-h-[180px] hover:border-[#B9FF66]/50 hover:bg-[#2D3549] group">
-              <div className="w-12 h-12 rounded-full bg-[#B9FF66]/20 flex items-center justify-center mb-3 group-hover:scale-110 transition-transform">
-                <Plus className="h-6 w-6 text-[#B9FF66]" />
+          <div className="bg-[#3D55B6] rounded-3xl p-5 h-[120px] flex flex-col justify-between text-white hover:scale-[1.02] transition-transform">
+            <div className="flex items-start justify-between">
+              <span className="text-white/70 text-sm font-medium">Total</span>
+              <div className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center">
+                <Users className="h-4 w-4 text-white" />
               </div>
-              <span className="text-[#94A3B8] font-medium">Add new project</span>
-            </Link>
-
-            {/* Project Cards */}
-            {projects.map((project) => (
-              <Link 
-                key={project.id} 
-                href="/projects"
-                className={project.color}
-              >
-                {/* Tag */}
-                <span className={`${project.tagClass} mb-3`}>#{project.tag}</span>
-                
-                {/* Header */}
-                <div className="flex items-start justify-between mb-4">
-                  <h3 className="text-xl font-bold">{project.name}</h3>
-                  <div className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center hover:bg-white/30 transition-colors cursor-pointer">
-                    <ArrowUpRight className="h-4 w-4" />
-                  </div>
-                </div>
-
-                {/* Tasks */}
-                <p className="text-white/70 text-sm mb-4">
-                  Completed tasks: {project.tasks.toLocaleString()}
-                </p>
-
-                {/* Budget */}
-                <p className="text-2xl font-bold mb-4">{formatCurrency(project.budget)}</p>
-
-                {/* Team */}
-                <div className="flex items-center justify-between">
-                  <div className="avatar-group">
-                    {project.team.map((member, i) => (
-                      <div 
-                        key={i} 
-                        className="avatar"
-                        style={{ backgroundColor: ['#3D55B6', '#DC6F31', '#BC5FCF', '#4E956A', '#C55050', '#459BBE'][i % 6] }}
-                      >
-                        {member}
-                      </div>
-                    ))}
-                    {project.extraMembers && (
-                      <div className="avatar bg-white/20 text-white">
-                        +{project.extraMembers}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </Link>
-            ))}
+            </div>
+            <div>
+              <p className="text-3xl font-bold">1</p>
+              <p className="text-white/70 text-sm">employees</p>
+            </div>
+          </div>
+          <div className="bg-[#BC5FCF] rounded-3xl p-5 h-[120px] flex flex-col justify-between text-white hover:scale-[1.02] transition-transform">
+            <div className="flex items-start justify-between">
+              <span className="text-white/70 text-sm font-medium">Active</span>
+              <div className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center">
+                <Briefcase className="h-4 w-4 text-white" />
+              </div>
+            </div>
+            <div>
+              <p className="text-3xl font-bold">3</p>
+              <p className="text-white/70 text-sm">projects</p>
+            </div>
+          </div>
+          <div className="bg-[#DC6F31] rounded-3xl p-5 h-[120px] flex flex-col justify-between text-white hover:scale-[1.02] transition-transform">
+            <div className="flex items-start justify-between">
+              <span className="text-white/70 text-sm font-medium">Total</span>
+              <div className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center">
+                <DollarSign className="h-4 w-4 text-white" />
+              </div>
+            </div>
+            <div>
+              <p className="text-3xl font-bold">$45,000</p>
+              <p className="text-white/70 text-sm">revenue</p>
+            </div>
           </div>
         </div>
 
-        {/* Bottom Section: Calendar & Quick Stats */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Calendar Widget */}
-          <div className="card-dark p-6">
+        {/* Quick Actions */}
+        <div className="card-dark p-6 mb-8">
+          <h3 className="text-xl font-bold text-white mb-4">Quick Actions</h3>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <Link href="/employees" className="h-[80px] flex items-center gap-3 p-3 rounded-lg bg-white/5 hover:bg-[#B9FF66]/10 transition-colors border-l-4 border-[#B9FF66]">
+              <div className="w-10 h-10 rounded-lg bg-[#B9FF66]/20 flex items-center justify-center">
+                <Users className="h-5 w-5 text-[#B9FF66]" />
+              </div>
+              <div>
+                <p className="text-white font-medium">Add Employee</p>
+                <p className="text-sm text-[#64748B]">Create new employee record</p>
+              </div>
+            </Link>
+            <Link href="/projects" className="h-[80px] flex items-center gap-3 p-3 rounded-lg bg-white/5 hover:bg-[#3D55B6]/10 transition-colors border-l-4 border-[#3D55B6]">
+              <div className="w-10 h-10 rounded-lg bg-[#3D55B6]/20 flex items-center justify-center">
+                <FolderKanban className="h-5 w-5 text-[#3D55B6]" />
+              </div>
+              <div>
+                <p className="text-white font-medium">New Project</p>
+                <p className="text-sm text-[#64748B]">Start a new project</p>
+              </div>
+            </Link>
+            <Link href="/finance" className="h-[80px] flex items-center gap-3 p-3 rounded-lg bg-white/5 hover:bg-[#DC6F31]/10 transition-colors border-l-4 border-[#DC6F31]">
+              <div className="w-10 h-10 rounded-lg bg-[#DC6F31]/20 flex items-center justify-center">
+                <DollarSign className="h-5 w-5 text-[#DC6F31]" />
+              </div>
+              <div>
+                <p className="text-white font-medium">Add Transaction</p>
+                <p className="text-sm text-[#64748B]">Record income or expense</p>
+              </div>
+            </Link>
+          </div>
+        </div>
+
+        {/* Recent Projects - Colorful Cards */}
+        {recentProjects.length > 0 && (
+          <div className="mt-8">
             <div className="flex items-center justify-between mb-6">
-              <h3 className="text-xl font-bold text-white">Calendar</h3>
-              <span className="text-[#64748B]">{'{April}'}</span>
+              <h3 className="text-xl font-bold text-white">Recent Projects</h3>
+              <Link href="/projects" className="text-sm text-[#B9FF66] hover:underline flex items-center gap-1">
+                View All <ArrowUpRight className="h-4 w-4" />
+              </Link>
             </div>
-            <div className="grid grid-cols-7 gap-2">
-              {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((day, i) => (
-                <div key={i} className="text-center text-xs text-[#64748B] font-medium py-2">
-                  {day}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {recentProjects.map((project, index) => {
+                const colorSchemes = [
+                  { bg: 'bg-[#3D55B6]', light: 'bg-[#3D55B6]/20', text: 'text-[#8BA4FF]' },
+                  { bg: 'bg-[#DC6F31]', light: 'bg-[#DC6F31]/20', text: 'text-[#FF9B6B]' },
+                  { bg: 'bg-[#BC5FCF]', light: 'bg-[#BC5FCF]/20', text: 'text-[#E5A8F0]' },
+                  { bg: 'bg-[#4E956A]', light: 'bg-[#4E956A]/20', text: 'text-[#7DD3A0]' },
+                  { bg: 'bg-[#C55050]', light: 'bg-[#C55050]/20', text: 'text-[#FF9B9B]' },
+                  { bg: 'bg-[#459BBE]', light: 'bg-[#459BBE]/20', text: 'text-[#7DD3F0]' },
+                ];
+                const colors = colorSchemes[index % colorSchemes.length];
+                return (
+                  <Link
+                    key={project.id}
+                    href={`/projects`}
+                    className={`${colors.bg} rounded-3xl p-5 text-white hover:scale-[1.02] transition-transform cursor-pointer block`}
+                  >
+                    <div className="flex items-start justify-between mb-3">
+                      <span className="text-white/80 text-sm font-medium">#{project.category}</span>
+                      <div className={`w-8 h-8 rounded-full ${colors.light} flex items-center justify-center`}>
+                        <ArrowUpRight className={`h-4 w-4 ${colors.text}`} />
+                      </div>
+                    </div>
+                    <h4 className="text-xl font-bold mb-1">{project.name}</h4>
+                    <p className="text-white/70 text-sm mb-4">Completed tasks: {project.tasksCompleted || 0}</p>
+                    <div className="flex items-center justify-between">
+                      <span className="text-2xl font-bold">{formatCurrency(project.budget)}</span>
+                      <div className="flex items-center">
+                        {project.team?.slice(0, 3).map((member: any, i: number) => (
+                          <div
+                            key={i}
+                            className="w-8 h-8 rounded-full bg-white/20 border-2 border-white/30 flex items-center justify-center -ml-2 first:ml-0 text-xs font-medium"
+                          >
+                            {member.name?.split(' ').map((n: string) => n[0]).join('')}
+                          </div>
+                        ))}
+                        {project.extraMembers > 0 && (
+                          <div className="w-8 h-8 rounded-full bg-black/30 border-2 border-white/30 flex items-center justify-center -ml-2 text-xs font-medium">
+                            +{project.extraMembers}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </Link>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* Task Overview */}
+        <div className="mt-8 card-dark p-6">
+          <div className="flex items-center justify-between mb-6">
+            <h3 className="text-xl font-bold text-white">Task Overview</h3>
+            <Link href="/tasks" className="text-sm text-[#B9FF66] hover:underline flex items-center gap-1">
+              View All <ArrowUpRight className="h-4 w-4" />
+            </Link>
+          </div>
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
+            <div className="bg-[#1E2538] rounded-2xl p-4 text-center">
+              <p className="text-3xl font-bold text-white">{stats.totalTasks}</p>
+              <p className="text-sm text-[#64748B]">Total Tasks</p>
+            </div>
+            <div className="bg-[#1E2538] rounded-2xl p-4 text-center">
+              <p className="text-3xl font-bold text-[#64748B]">{stats.todoTasks}</p>
+              <p className="text-sm text-[#64748B]">To Do</p>
+            </div>
+            <div className="bg-[#1E2538] rounded-2xl p-4 text-center">
+              <p className="text-3xl font-bold text-[#B9FF66]">{stats.inProgressTasks}</p>
+              <p className="text-sm text-[#64748B]">In Progress</p>
+            </div>
+            <div className="bg-[#1E2538] rounded-2xl p-4 text-center">
+              <p className="text-3xl font-bold text-[#BC5FCF]">{stats.reviewTasks}</p>
+              <p className="text-sm text-[#64748B]">Review</p>
+            </div>
+            <div className="bg-[#1E2538] rounded-2xl p-4 text-center">
+              <p className="text-3xl font-bold text-[#4E956A]">{stats.doneTasks}</p>
+              <p className="text-sm text-[#64748B]">Done</p>
+            </div>
+          </div>
+          
+          {/* Recent Tasks */}
+          {recentTasks.length > 0 && (
+            <div className="space-y-3">
+              <h4 className="text-sm font-medium text-[#94A3B8] uppercase tracking-wider">Recent Tasks</h4>
+              {recentTasks.map((task) => (
+                <div key={task.id} className="bg-[#1E2538] rounded-xl p-4 flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className={`w-2 h-2 rounded-full ${
+                      task.status === 'done' ? 'bg-[#4E956A]' :
+                      task.status === 'in_progress' ? 'bg-[#B9FF66]' :
+                      task.status === 'review' ? 'bg-[#BC5FCF]' :
+                      'bg-[#64748B]'
+                    }`} />
+                    <div>
+                      <p className="font-medium text-white">{task.title}</p>
+                      <p className="text-xs text-[#64748B]">{task.project} • {task.assignedTo}</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                      task.priority === 'urgent' ? 'bg-[#C55050]/20 text-[#C55050]' :
+                      task.priority === 'high' ? 'bg-[#DC6F31]/20 text-[#DC6F31]' :
+                      task.priority === 'medium' ? 'bg-[#459BBE]/20 text-[#459BBE]' :
+                      'bg-[#64748B]/20 text-[#64748B]'
+                    }`}>
+                      {task.priority}
+                    </span>
+                    <span className="text-xs text-[#64748B]">{task.status}</span>
+                  </div>
                 </div>
               ))}
-              {calendarDays.map((day, i) => (
-                <div
-                  key={i}
-                  className={`relative ${
-                    day.active 
-                      ? 'calendar-day-active' 
-                      : day.hasEvent 
-                        ? 'calendar-day-has-event' 
-                        : 'calendar-day'
-                  }`}
-                >
-                  {day.day}
-                  {day.hasEvent && day.members && (
-                    <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 flex -space-x-1">
-                      {day.members.slice(0, 2).map((m, j) => (
-                        <div 
-                          key={j} 
-                          className="w-4 h-4 rounded-full border border-[#252B3D] bg-[#3D55B6] text-[8px] flex items-center justify-center text-white"
-                        >
-                          {m[0]}
-                        </div>
-                      ))}
-                    </div>
+            </div>
+          )}
+        </div>
+
+        {/* Finance Summary */}
+        <div className="mt-8 card-dark p-6">
+          <div className="flex items-center justify-between mb-6">
+            <h3 className="text-xl font-bold text-white">Finance Summary</h3>
+            <Link href="/finance" className="text-sm text-[#B9FF66] hover:underline flex items-center gap-1">
+              View Details <ArrowUpRight className="h-4 w-4" />
+            </Link>
+          </div>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="bg-[#1E2538] rounded-2xl p-4">
+              <div className="flex items-center gap-2 mb-2">
+                <TrendingUp className="h-5 w-5 text-[#4E956A]" />
+                <span className="text-sm text-[#64748B]">Income</span>
+              </div>
+              <p className="text-2xl font-bold text-[#4E956A]">{formatCurrency(stats.totalIncome)}</p>
+            </div>
+            <div className="bg-[#1E2538] rounded-2xl p-4">
+              <div className="flex items-center gap-2 mb-2">
+                <TrendingDown className="h-5 w-5 text-[#C55050]" />
+                <span className="text-sm text-[#64748B]">Expenses</span>
+              </div>
+              <p className="text-2xl font-bold text-[#C55050]">{formatCurrency(stats.totalExpenses)}</p>
+            </div>
+            <div className="bg-[#1E2538] rounded-2xl p-4">
+              <div className="flex items-center gap-2 mb-2">
+                <Wallet className="h-5 w-5 text-[#B9FF66]" />
+                <span className="text-sm text-[#64748B]">Net Profit</span>
+              </div>
+              <p className={`text-2xl font-bold ${stats.netProfit >= 0 ? 'text-[#B9FF66]' : 'text-[#C55050]'}`}>
+                {formatCurrency(stats.netProfit)}
+              </p>
+            </div>
+            <div className="bg-[#1E2538] rounded-2xl p-4">
+              <div className="flex items-center gap-2 mb-2">
+                <FolderKanban className="h-5 w-5 text-[#BC5FCF]" />
+                <span className="text-sm text-[#64748B]">Project Budget</span>
+              </div>
+              <p className="text-2xl font-bold text-[#BC5FCF]">{formatCurrency(stats.totalProjectBudget)}</p>
+            </div>
+          </div>
+        </div>
+
+        {/* Recent Activity */}
+        {activities.length > 0 && (
+          <div className="mt-8 card-dark p-6">
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-xl font-bold text-white">Recent Activity</h3>
+              <span className="text-sm text-[#64748B]">Last 5 activities</span>
+            </div>
+            <div className="space-y-4">
+              {activities.map((activity) => (
+                <div key={activity.id} className="flex items-start gap-4">
+                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${
+                    activity.type === 'employee' ? 'bg-[#BC5FCF]/20' :
+                    activity.type === 'project' ? 'bg-[#3D55B6]/20' :
+                    'bg-[#4E956A]/20'
+                  }`}>
+                    {activity.type === 'employee' ? <Users className="h-5 w-5 text-[#BC5FCF]" /> :
+                     activity.type === 'project' ? <FolderKanban className="h-5 w-5 text-[#3D55B6]" /> :
+                     <DollarSign className="h-5 w-5 text-[#4E956A]" />}
+                  </div>
+                  <div className="flex-1">
+                    <p className="font-medium text-white">{activity.title}</p>
+                    <p className="text-sm text-[#64748B]">{activity.description}</p>
+                    <p className="text-xs text-[#94A3B8] mt-1">{formatTimeAgo(activity.date)}</p>
+                  </div>
+                  {activity.amount && (
+                    <span className={`font-bold ${activity.amount > 0 ? 'text-[#4E956A]' : 'text-[#C55050]'}`}>
+                      {activity.amount > 0 ? '+' : ''}{formatCurrency(activity.amount)}
+                    </span>
                   )}
                 </div>
               ))}
             </div>
           </div>
-
-          {/* Quick Metrics */}
-          <div className="lg:col-span-2 grid grid-cols-2 gap-4">
-            <div className="card-dark p-5 flex items-center gap-4">
-              <div className="w-12 h-12 rounded-2xl bg-[#B9FF66]/20 flex items-center justify-center">
-                <TrendingUp className="h-6 w-6 text-[#B9FF66]" />
-              </div>
-              <div>
-                <p className="text-2xl font-bold text-white">+{stats.newHires}</p>
-                <p className="text-sm text-[#64748B]">New hires this month</p>
-              </div>
-            </div>
-            <div className="card-dark p-5 flex items-center gap-4">
-              <div className="w-12 h-12 rounded-2xl bg-[#BC5FCF]/20 flex items-center justify-center">
-                <Users className="h-6 w-6 text-[#BC5FCF]" />
-              </div>
-              <div>
-                <p className="text-2xl font-bold text-white">{stats.employees}</p>
-                <p className="text-sm text-[#64748B]">Total employees</p>
-              </div>
-            </div>
-            <div className="card-dark p-5 flex items-center gap-4">
-              <div className="w-12 h-12 rounded-2xl bg-[#459BBE]/20 flex items-center justify-center">
-                <Briefcase className="h-6 w-6 text-[#459BBE]" />
-              </div>
-              <div>
-                <p className="text-2xl font-bold text-white">{stats.activeProjects}</p>
-                <p className="text-sm text-[#64748B]">Active projects</p>
-              </div>
-            </div>
-            <div className="card-dark p-5 flex items-center gap-4">
-              <div className="w-12 h-12 rounded-2xl bg-[#DC6F31]/20 flex items-center justify-center">
-                <DollarSign className="h-6 w-6 text-[#DC6F31]" />
-              </div>
-              <div>
-                <p className="text-2xl font-bold text-white">{formatCurrency(stats.totalIncome)}</p>
-                <p className="text-sm text-[#64748B]">Total revenue</p>
-              </div>
-            </div>
-          </div>
-        </div>
+        )}
 
         {/* Department Progress */}
         <div className="mt-8 card-dark p-6">

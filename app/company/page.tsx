@@ -101,18 +101,6 @@ type Leave = {
   status: string;
 };
 
-type Invoice = {
-  _id: string;
-  invoiceId?: string;
-  invoiceNumber?: string;
-  client?: Client;
-  issueDate: string;
-  dueDate: string;
-  status: string;
-  total?: number;
-  balanceDue?: number;
-};
-
 type DatabaseStatus = {
   connected: boolean;
   mode: 'mongodb' | 'local-demo';
@@ -120,11 +108,10 @@ type DatabaseStatus = {
 };
 
 const tabs = [
-  { id: 'crm', label: 'CRM', icon: Users },
+  { id: 'crm', label: 'CRM', icon: Handshake },
   { id: 'sales', label: 'Sales', icon: Handshake },
   { id: 'hr', label: 'HR', icon: CalendarCheck },
   { id: 'assets', label: 'Assets', icon: Laptop },
-  { id: 'billing', label: 'Billing', icon: FileText },
 ] as const;
 
 type TabId = (typeof tabs)[number]['id'];
@@ -178,7 +165,6 @@ export default function CompanyOperationsPage() {
   const [assets, setAssets] = useState<Asset[]>([]);
   const [attendance, setAttendance] = useState<Attendance[]>([]);
   const [leaves, setLeaves] = useState<Leave[]>([]);
-  const [invoices, setInvoices] = useState<Invoice[]>([]);
 
   const [clientForm, setClientForm] = useState({
     companyName: '',
@@ -240,30 +226,9 @@ export default function CompanyOperationsPage() {
     location: '',
   });
 
-  const [invoiceForm, setInvoiceForm] = useState({
-    invoiceNumber: '',
-    issueDate: today,
-    dueDate: today,
-    itemDescription: '',
-    quantity: '1',
-    rate: '',
-    taxRate: '0',
-    discount: '0',
-    status: 'draft',
-    notes: '',
-  });
-
   const primaryEmployeeId = employees[0]?._id ?? '';
   const primaryClientId = clients[0]?._id ?? '';
   const primaryProjectId = projects[0]?._id ?? '';
-
-  const invoicePreview = useMemo(() => {
-    const quantity = Number(invoiceForm.quantity || 0);
-    const rate = Number(invoiceForm.rate || 0);
-    const subtotal = quantity * rate;
-    const taxAmount = (subtotal * Number(invoiceForm.taxRate || 0)) / 100;
-    return subtotal + taxAmount - Number(invoiceForm.discount || 0);
-  }, [invoiceForm]);
 
   const fetchCompanyData = useCallback(async () => {
     try {
@@ -278,7 +243,6 @@ export default function CompanyOperationsPage() {
         assetData,
         attendanceData,
         leaveData,
-        invoiceData,
       ] = await Promise.all([
         getJson<DatabaseStatus>('/api/system/database'),
         getJson<Employee[]>('/api/employees'),
@@ -289,7 +253,6 @@ export default function CompanyOperationsPage() {
         getJson<Asset[]>('/api/assets'),
         getJson<Attendance[]>('/api/hr/attendance'),
         getJson<Leave[]>('/api/hr/leaves'),
-        getJson<Invoice[]>('/api/invoices'),
       ]);
 
       setDatabase(databaseData);
@@ -301,7 +264,6 @@ export default function CompanyOperationsPage() {
       setAssets(assetData);
       setAttendance(attendanceData);
       setLeaves(leaveData);
-      setInvoices(invoiceData);
     } catch (fetchError) {
       setError(fetchError instanceof Error ? fetchError.message : 'Unable to load company data');
     } finally {
@@ -449,37 +411,6 @@ export default function CompanyOperationsPage() {
     });
   };
 
-  const createInvoice = (event: FormEvent) => {
-    event.preventDefault();
-    handleCreate('invoice', async () => {
-      await postJson('/api/invoices', {
-        invoiceNumber: invoiceForm.invoiceNumber || undefined,
-        client: primaryClientId,
-        project: primaryProjectId || undefined,
-        issueDate: invoiceForm.issueDate,
-        dueDate: invoiceForm.dueDate,
-        items: [
-          {
-            description: invoiceForm.itemDescription,
-            quantity: Number(invoiceForm.quantity || 0),
-            rate: Number(invoiceForm.rate || 0),
-          },
-        ],
-        taxRate: Number(invoiceForm.taxRate || 0),
-        discount: Number(invoiceForm.discount || 0),
-        status: invoiceForm.status,
-        notes: invoiceForm.notes,
-      });
-      setInvoiceForm((current) => ({
-        ...current,
-        invoiceNumber: '',
-        itemDescription: '',
-        rate: '',
-        notes: '',
-      }));
-    });
-  };
-
   if (loading) {
     return (
       <div className="min-h-screen bg-[#191E2C] flex items-center justify-center">
@@ -499,10 +430,6 @@ export default function CompanyOperationsPage() {
             <Link href="/" className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-xl bg-[#B9FF66] flex items-center justify-center">
                 <Building2 className="h-5 w-5 text-[#191E2C]" />
-              </div>
-              <div>
-                <h1 className="text-xl font-bold text-white">Company</h1>
-                <p className="text-xs text-[#64748B]">Operations</p>
               </div>
             </Link>
 
@@ -534,7 +461,7 @@ export default function CompanyOperationsPage() {
         <section className="mb-8 grid grid-cols-1 xl:grid-cols-[1fr_auto] gap-5 items-end">
           <div>
             <h2 className="text-4xl font-bold text-white mb-2">Company Operations</h2>
-            <p className="text-[#94A3B8]">CRM, sales, HR, assets, and billing in one workspace.</p>
+            <p className="text-[#94A3B8]">CRM, sales, HR, and assets in one workspace.</p>
           </div>
           <div className="card-dark p-4 min-w-[280px]">
             <div className="flex items-center justify-between gap-4">
@@ -569,7 +496,6 @@ export default function CompanyOperationsPage() {
           <Metric icon={CalendarCheck} label="Attendance" value={attendance.length} />
           <Metric icon={ClipboardList} label="Leaves" value={leaves.length} />
           <Metric icon={Laptop} label="Assets" value={assets.length} />
-          <Metric icon={FileText} label="Invoices" value={invoices.length} />
           <Metric icon={Database} label="Mode" value={database?.mode === 'mongodb' ? 'DB' : 'Demo'} />
         </section>
 
@@ -754,47 +680,6 @@ export default function CompanyOperationsPage() {
           />
         )}
 
-        {activeTab === 'billing' && (
-          <TwoColumn
-            form={
-              <Panel title="Create Invoice">
-                <form onSubmit={createInvoice} className="space-y-4">
-                  <Input value={invoiceForm.invoiceNumber} onChange={(value) => setInvoiceForm({ ...invoiceForm, invoiceNumber: value })} placeholder="Invoice number" />
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    <Input value={invoiceForm.issueDate} onChange={(value) => setInvoiceForm({ ...invoiceForm, issueDate: value })} type="date" />
-                    <Input value={invoiceForm.dueDate} onChange={(value) => setInvoiceForm({ ...invoiceForm, dueDate: value })} type="date" />
-                  </div>
-                  <Input value={invoiceForm.itemDescription} onChange={(value) => setInvoiceForm({ ...invoiceForm, itemDescription: value })} placeholder="Line item description" required />
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    <Input value={invoiceForm.quantity} onChange={(value) => setInvoiceForm({ ...invoiceForm, quantity: value })} placeholder="Quantity" type="number" required />
-                    <Input value={invoiceForm.rate} onChange={(value) => setInvoiceForm({ ...invoiceForm, rate: value })} placeholder="Rate" type="number" required />
-                  </div>
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                    <Input value={invoiceForm.taxRate} onChange={(value) => setInvoiceForm({ ...invoiceForm, taxRate: value })} placeholder="Tax %" type="number" />
-                    <Input value={invoiceForm.discount} onChange={(value) => setInvoiceForm({ ...invoiceForm, discount: value })} placeholder="Discount" type="number" />
-                    <Select value={invoiceForm.status} onChange={(value) => setInvoiceForm({ ...invoiceForm, status: value })} options={['draft', 'sent', 'viewed', 'paid', 'overdue', 'cancelled']} />
-                  </div>
-                  <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
-                    <p className="text-xs text-[#64748B]">Invoice total</p>
-                    <p className="text-2xl font-bold text-[#B9FF66]">{money(invoicePreview)}</p>
-                  </div>
-                  <SubmitButton saving={saving === 'invoice'} label="Create invoice" disabled={!primaryClientId} />
-                </form>
-              </Panel>
-            }
-            content={
-              <Panel title="Invoices">
-                <div className="space-y-3">
-                  {invoices.map((invoice) => (
-                    <Row key={invoice._id} title={invoice.invoiceNumber || invoice.invoiceId || 'Invoice'} meta={`${invoice.status} / due ${new Date(invoice.dueDate).toLocaleDateString()}`}>
-                      <span className="font-semibold text-[#B9FF66]">{money(invoice.total ?? invoice.balanceDue ?? 0)}</span>
-                    </Row>
-                  ))}
-                </div>
-              </Panel>
-            }
-          />
-        )}
       </main>
     </div>
   );

@@ -10,6 +10,7 @@ export interface IProject extends Document {
   startDate: Date;
   endDate: Date;
   budget: number;
+  category?: string;
   assignedEmployees: string[];
   projectManager: string;
   progress: number;
@@ -19,6 +20,12 @@ export interface IProject extends Document {
     dueDate: Date;
     completed: boolean;
   }[];
+  team?: {
+    employee: mongoose.Types.ObjectId;
+    role: string;
+  }[];
+  tasksCompleted?: number;
+  tasksTotal?: number;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -70,6 +77,10 @@ const ProjectSchema: Schema<IProject> = new Schema(
       type: Number,
       required: true,
     },
+    category: {
+      type: String,
+      default: 'General',
+    },
     assignedEmployees: [String],
     projectManager: {
       type: String,
@@ -83,6 +94,18 @@ const ProjectSchema: Schema<IProject> = new Schema(
     },
     technologies: [String],
     milestones: [MilestoneSchema],
+    team: [{
+      employee: { type: Schema.Types.ObjectId, ref: 'Employee' },
+      role: { type: String, default: 'Member' }
+    }],
+    tasksCompleted: {
+      type: Number,
+      default: 0,
+    },
+    tasksTotal: {
+      type: Number,
+      default: 0,
+    },
   },
   {
     timestamps: true,

@@ -29,10 +29,14 @@ type ProjectRecord = DemoRecord & {
   startDate: string;
   endDate: string;
   budget: number;
+  category?: string;
   progress: number;
   assignedEmployees: string[];
   projectManager: string;
   technologies: string[];
+  team?: { employee?: { firstName: string; lastName: string; avatar?: string }; role?: string }[];
+  tasksCompleted?: number;
+  tasksTotal?: number;
 };
 
 type TimeEntry = {
@@ -979,9 +983,41 @@ export const demoData = {
         totalIncome: finance.summary.totalIncome,
         totalExpenses: finance.summary.totalExpenses,
         netProfit: finance.summary.netProfit,
+        totalTasks: tasks.length,
+        todoTasks: tasks.filter((t) => t.status === 'todo').length,
+        inProgressTasks: tasks.filter((t) => t.status === 'in_progress').length,
+        reviewTasks: tasks.filter((t) => t.status === 'review').length,
+        doneTasks: tasks.filter((t) => t.status === 'done').length,
       },
       activities,
       departmentData,
+      recentTasks: tasks.slice(0, 5).map((t) => ({
+        id: t._id,
+        title: t.title,
+        status: t.status,
+        priority: t.priority,
+        dueDate: t.dueDate,
+        project: t.project?.name || 'No Project',
+        assignedTo: t.assignedTo ? `${t.assignedTo.firstName} ${t.assignedTo.lastName}` : 'Unassigned',
+      })),
+      recentProjects: projects.slice(0, 6).map((p) => ({
+        id: p._id,
+        name: p.name,
+        category: p.category || 'General',
+        budget: p.budget,
+        client: p.client,
+        status: p.status,
+        tasksCompleted: p.tasksCompleted || Math.floor(Math.random() * 50),
+        tasksTotal: p.tasksTotal || 100,
+        team: p.team?.slice(0, 3).map((m: any) => ({
+          name: m.employee ? `${m.employee.firstName} ${m.employee.lastName}` : 'Unknown',
+          avatar: m.employee?.avatar,
+        })) || [
+          { name: 'John Doe', avatar: null },
+          { name: 'Jane Smith', avatar: null },
+        ],
+        extraMembers: Math.max(0, (p.team?.length || 2) - 3),
+      })),
     });
   },
 

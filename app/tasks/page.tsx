@@ -44,6 +44,17 @@ export default function TaskManagement() {
   const [editingTask, setEditingTask] = useState<Task | null>(null);
   const [timeTracking, setTimeTracking] = useState<{ taskId: string; hours: number; description: string } | null>(null);
 
+  const [formData, setFormData] = useState({
+    title: '',
+    description: '',
+    status: 'todo' as Task['status'],
+    priority: 'medium' as Task['priority'],
+    dueDate: '',
+    estimatedHours: '',
+    project: '',
+    assignedTo: '',
+  });
+
   const fetchTasks = useCallback(async () => {
     try {
       const queryParams = filterStatus ? `?status=${filterStatus}` : '';
@@ -70,6 +81,66 @@ export default function TaskManagement() {
       if (response.ok) fetchTasks();
     } catch (error) {
       console.error('Error deleting task:', error);
+    }
+  };
+
+  const resetForm = () => {
+    setFormData({
+      title: '',
+      description: '',
+      status: 'todo',
+      priority: 'medium',
+      dueDate: '',
+      estimatedHours: '',
+      project: '',
+      assignedTo: '',
+    });
+  };
+
+  const handleOpenModal = (task?: Task) => {
+    if (task) {
+      setEditingTask(task);
+      setFormData({
+        title: task.title,
+        description: task.description,
+        status: task.status,
+        priority: task.priority,
+        dueDate: task.dueDate ? task.dueDate.split('T')[0] : '',
+        estimatedHours: task.estimatedHours?.toString() || '',
+        project: task.project?.projectId || '',
+        assignedTo: '',
+      });
+    } else {
+      setEditingTask(null);
+      resetForm();
+    }
+    setShowModal(true);
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const payload = {
+      ...formData,
+      estimatedHours: parseFloat(formData.estimatedHours) || 0,
+    };
+
+    try {
+      const url = editingTask ? `/api/tasks/${editingTask._id}` : '/api/tasks';
+      const method = editingTask ? 'PUT' : 'POST';
+      
+      const response = await fetch(url, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+
+      if (response.ok) {
+        setShowModal(false);
+        resetForm();
+        fetchTasks();
+      }
+    } catch (error) {
+      console.error('Error saving task:', error);
     }
   };
 
@@ -123,7 +194,7 @@ export default function TaskManagement() {
               </Link>
             </div>
             <button
-              onClick={() => { setEditingTask(null); setShowModal(true); }}
+              onClick={() => handleOpenModal()}
               className="btn-lime"
             >
               <Plus className="h-4 w-4" />
@@ -197,7 +268,7 @@ export default function TaskManagement() {
                         <span className="text-xs text-[#64748B] font-mono">{task.taskId}</span>
                         <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                           <button
-                            onClick={() => { setEditingTask(task); setShowModal(true); }}
+                            onClick={() => handleOpenModal(task)}
                             className="w-6 h-6 rounded bg-[#3D55B6]/20 text-[#8BA4FF] flex items-center justify-center"
                           >
                             <Edit2 className="w-3 h-3" />
@@ -280,18 +351,99 @@ export default function TaskManagement() {
       {/* Add/Edit Modal */}
       {showModal && (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-          <div className="bg-[#252B3D] rounded-2xl max-w-lg w-full border border-white/10">
-            <div className="p-6 border-b border-white/10">
-              <h2 className="text-xl font-bold text-white">
-                {editingTask ? 'Edit Task' : 'New Task'}
-              </h2>
-            </div>
-            <div className="p-6">
-              <p className="text-[#94A3B8]">Task management form coming soon...</p>
-            </div>
-            <div className="p-6 border-t border-white/10 flex justify-end gap-3">
-              <button onClick={() => setShowModal(false)} className="btn-dark">Cancel</button>
-            </div>
+          <div className="bg-[#252B3D] rounded-2xl max-w-lg w-full border border-white/10 max-h-[90vh] overflow-y-auto">
+            <form onSubmit={handleSubmit}>
+              <div className="p-6 border-b border-white/10">
+                <h2 className="text-xl font-bold text-white">
+                  {editingTask ? 'Edit Task' : 'New Task'}
+                </h2>
+              </div>
+              <div className="p-6 space-y-4">
+                <div>
+                  <label className="block text-sm text-[#94A3B8] mb-1">Title</label>
+                  <input
+                    type="text"
+                    value={formData.title}
+                    onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+                    className="input-dark w-full"
+                    required
+                    placeholder="Task title"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm text-[#94A3B8] mb-1">Description</label>
+                  <textarea
+                    value={formData.description}
+                    onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                    className="input-dark w-full h-20"
+                    placeholder="Task description"
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm text-[#94A3B8] mb-1">Status</label>
+                    <select
+                      value={formData.status}
+                      onChange={(e) => setFormData({ ...formData, status: e.target.value as Task['status'] })}
+                      className="input-dark w-full"
+                    >
+                      <option value="todo">To Do</option>
+                      <option value="in_progress">In Progress</option>
+                      <option value="review">Review</option>
+                      <option value="done">Done</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm text-[#94A3B8] mb-1">Priority</label>
+                    <select
+                      value={formData.priority}
+                      onChange={(e) => setFormData({ ...formData, priority: e.target.value as Task['priority'] })}
+                      className="input-dark w-full"
+                    >
+                      <option value="low">Low</option>
+                      <option value="medium">Medium</option>
+                      <option value="high">High</option>
+                      <option value="urgent">Urgent</option>
+                    </select>
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm text-[#94A3B8] mb-1">Due Date</label>
+                    <input
+                      type="date"
+                      value={formData.dueDate}
+                      onChange={(e) => setFormData({ ...formData, dueDate: e.target.value })}
+                      className="input-dark w-full"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm text-[#94A3B8] mb-1">Estimated Hours</label>
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.5"
+                      value={formData.estimatedHours}
+                      onChange={(e) => setFormData({ ...formData, estimatedHours: e.target.value })}
+                      className="input-dark w-full"
+                      placeholder="Hours"
+                    />
+                  </div>
+                </div>
+              </div>
+              <div className="p-6 border-t border-white/10 flex justify-end gap-3">
+                <button 
+                  type="button"
+                  onClick={() => { setShowModal(false); resetForm(); }}
+                  className="btn-dark"
+                >
+                  Cancel
+                </button>
+                <button type="submit" className="btn-lime">
+                  {editingTask ? 'Update' : 'Create'} Task
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

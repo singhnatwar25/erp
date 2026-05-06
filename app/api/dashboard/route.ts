@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import connectDB from '@/lib/mongodb';
 import Employee from '@/models/Employee';
 import Project from '@/models/Project';
+import Task from '@/models/Task';
 import { Transaction, Budget } from '@/models/Finance';
 import { isDatabaseAvailable } from '@/lib/database';
 import { demoData } from '@/lib/demo-data';
@@ -43,6 +44,21 @@ export async function GET(request: NextRequest) {
     ]);
     const totalProjectBudget = budgetResult[0]?.total || 0;
     
+    // Get task stats
+    const totalTasks = await Task.countDocuments();
+    const todoTasks = await Task.countDocuments({ status: 'todo' });
+    const inProgressTasks = await Task.countDocuments({ status: 'in_progress' });
+    const reviewTasks = await Task.countDocuments({ status: 'review' });
+    const doneTasks = await Task.countDocuments({ status: 'done' });
+    
+    // Get recent tasks
+    const recentTasks = await Task.find()
+      .sort({ createdAt: -1 })
+      .limit(5)
+      .populate('project', 'name')
+      .populate('assignedTo', 'firstName lastName')
+      .select('title status priority dueDate project assignedTo');
+    
     // Get finance stats
     const incomeResult = await Transaction.aggregate([
       { $match: { type: 'income', status: 'completed' } },
@@ -80,8 +96,9 @@ export async function GET(request: NextRequest) {
     
     const recentProjects = await Project.find()
       .sort({ createdAt: -1 })
-      .limit(3)
-      .select('name status client createdAt');
+      .limit(6)
+      .populate('team.employee', 'firstName lastName avatar')
+      .select('name status client createdAt budget category team tasksCompleted tasksTotal');
     
     const recentTransactions = await Transaction.find()
       .sort({ createdAt: -1 })
@@ -138,9 +155,38 @@ export async function GET(request: NextRequest) {
           totalIncome,
           totalExpenses,
           netProfit,
+          totalTasks,
+          todoTasks,
+          inProgressTasks,
+          reviewTasks,
+          doneTasks,
         },
         activities,
         departmentData: departmentData.map(d => ({ name: d._id, count: d.count })),
+        recentTasks: recentTasks.map(t => ({
+          id: t._id.toString(),
+          title: t.title,
+          status: t.status,
+          priority: t.priority,
+          dueDate: t.dueDate,
+          project: t.project?.name || 'No Project',
+          assignedTo: t.assignedTo ? `${t.assignedTo.firstName} ${t.assignedTo.lastName}` : 'Unassigned'
+        })),
+        recentProjects: recentProjects.map(p => ({
+          id: p._id.toString(),
+          name: p.name,
+          category: p.category || 'General',
+          budget: p.budget,
+          client: p.client,
+          status: p.status,
+          tasksCompleted: p.tasksCompleted || 0,
+          tasksTotal: p.tasksTotal || 0,
+          team: p.team?.slice(0, 3).map((m: any) => ({
+            name: m.employee ? `${m.employee.firstName} ${m.employee.lastName}` : 'Unknown',
+            avatar: m.employee?.avatar
+          })) || [],
+          extraMembers: Math.max(0, (p.team?.length || 0) - 3)
+        })),
       }
     });
   } catch (error) {
