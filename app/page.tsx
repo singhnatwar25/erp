@@ -143,55 +143,61 @@ export default function Dashboard() {
   }
 
   return (
-    <div className="min-h-screen bg-[#191E2C]">
-      {/* Top Navigation */}
-      <nav className="sticky top-0 z-50 bg-[#191E2C]/95 backdrop-blur-sm border-b border-white/5">
-        <div className="max-w-[1600px] mx-auto px-6 py-4">
-          <div className="flex items-center justify-between">
-            {/* Logo */}
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-[#B9FF66] flex items-center justify-center">
-                <LayoutDashboard className="h-5 w-5 text-[#191E2C]" />
-              </div>
+    <div className="min-h-screen bg-[#191E2C] flex">
+      {/* Sidebar */}
+      <aside className="fixed left-0 top-0 h-full w-[260px] bg-[#1E2538] border-r border-white/5 z-50 flex flex-col">
+        {/* Logo */}
+        <div className="p-6 border-b border-white/5">
+          <Link href="/" className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-[#B9FF66] flex items-center justify-center">
+              <LayoutDashboard className="h-5 w-5 text-[#191E2C]" />
             </div>
+            <span className="text-xl font-bold text-white">ERP</span>
+          </Link>
+        </div>
 
-            {/* Nav Pills */}
-            <div className="hidden md:flex items-center gap-2">
-              {navItems.map((item) => {
-                const Icon = item.icon;
-                return (
-                  <Link
-                    key={item.label}
-                    href={item.href as React.ComponentProps<typeof Link>['href']}
-                    onClick={() => setActiveTab(item.label.toLowerCase())}
-                    className={item.active ? 'nav-pill-active' : 'nav-pill'}
-                  >
-                    <Icon className="h-4 w-4" />
-                    {item.label}
-                  </Link>
-                );
-              })}
-            </div>
+        {/* Nav Items */}
+        <nav className="flex-1 p-4 space-y-1">
+          {navItems.map((item) => {
+            const Icon = item.icon;
+            return (
+              <Link
+                key={item.label}
+                href={item.href as React.ComponentProps<typeof Link>['href']}
+                onClick={() => setActiveTab(item.label.toLowerCase())}
+                className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-colors ${
+                  item.active
+                    ? 'bg-[#B9FF66] text-[#191E2C] font-medium'
+                    : 'text-[#94A3B8] hover:bg-white/5 hover:text-white'
+                }`}
+              >
+                <Icon className="h-5 w-5" />
+                <span>{item.label}</span>
+              </Link>
+            );
+          })}
+        </nav>
 
-            {/* Right Actions */}
-            <div className="flex items-center gap-3">
-              <button className="btn-lime">
-                <Plus className="h-4 w-4" />
-                <span className="hidden sm:inline">Invite user</span>
-              </button>
-              <button className="w-10 h-10 rounded-xl bg-[#252B3D] flex items-center justify-center text-[#94A3B8] hover:text-white transition-colors border border-white/10">
-                <Bell className="h-5 w-5" />
-              </button>
-              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#B9FF66] to-[#4E956A] flex items-center justify-center text-[#191E2C] font-bold">
-                JD
-              </div>
+        {/* Bottom Actions */}
+        <div className="p-4 border-t border-white/5 space-y-3">
+          <button className="w-full btn-lime flex items-center justify-center gap-2">
+            <Plus className="h-4 w-4" />
+            <span>Invite user</span>
+          </button>
+          <div className="flex items-center gap-3 px-2">
+            <button className="w-10 h-10 rounded-xl bg-[#252B3D] flex items-center justify-center text-[#94A3B8] hover:text-white transition-colors border border-white/10">
+              <Bell className="h-5 w-5" />
+            </button>
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#B9FF66] to-[#4E956A] flex items-center justify-center text-[#191E2C] font-bold">
+              JD
             </div>
+            <span className="text-sm text-[#94A3B8]">John Doe</span>
           </div>
         </div>
-      </nav>
+      </aside>
 
       {/* Main Content */}
-      <main className="max-w-[1600px] mx-auto px-6 py-8">
+      <main className="flex-1 ml-[260px] p-8">
         {/* Header Section */}
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 mb-8">
           <div>
