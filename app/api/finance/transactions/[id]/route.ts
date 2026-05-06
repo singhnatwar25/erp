@@ -1,16 +1,31 @@
 import { NextRequest, NextResponse } from 'next/server';
 import connectDB from '@/lib/mongodb';
 import { Transaction } from '@/models/Finance';
+import { isDatabaseAvailable } from '@/lib/database';
+import { demoData } from '@/lib/demo-data';
 
 // GET /api/finance/transactions/[id] - Get single transaction
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
+  const { id } = await params;
+
+  if (!(await isDatabaseAvailable())) {
+    const transaction = demoData.getTransaction(id);
+    if (!transaction) {
+      return NextResponse.json(
+        { success: false, error: 'Transaction not found' },
+        { status: 404 }
+      );
+    }
+    return NextResponse.json({ success: true, data: transaction });
+  }
+
   try {
     await connectDB();
-    
-    const transaction = await Transaction.findById(params.id);
+
+    const transaction = await Transaction.findById(id);
     
     if (!transaction) {
       return NextResponse.json(
@@ -31,15 +46,27 @@ export async function GET(
 // PUT /api/finance/transactions/[id] - Update transaction
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
+  const body = await request.json();
+  const { id } = await params;
+
+  if (!(await isDatabaseAvailable())) {
+    const transaction = demoData.updateTransaction(id, body);
+    if (!transaction) {
+      return NextResponse.json(
+        { success: false, error: 'Transaction not found' },
+        { status: 404 }
+      );
+    }
+    return NextResponse.json({ success: true, data: transaction });
+  }
+
   try {
     await connectDB();
-    
-    const body = await request.json();
-    
+
     const transaction = await Transaction.findByIdAndUpdate(
-      params.id,
+      id,
       body,
       { new: true, runValidators: true }
     );
@@ -63,12 +90,27 @@ export async function PUT(
 // DELETE /api/finance/transactions/[id] - Delete transaction
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
+  const { id } = await params;
+
+  if (!(await isDatabaseAvailable())) {
+    const transaction = demoData.deleteTransaction(id);
+    if (!transaction) {
+      return NextResponse.json(
+        { success: false, error: 'Transaction not found' },
+        { status: 404 }
+      );
+    }
+    return NextResponse.json(
+      { success: true, message: 'Transaction deleted successfully' }
+    );
+  }
+
   try {
     await connectDB();
-    
-    const transaction = await Transaction.findByIdAndDelete(params.id);
+
+    const transaction = await Transaction.findByIdAndDelete(id);
     
     if (!transaction) {
       return NextResponse.json(

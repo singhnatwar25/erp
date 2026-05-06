@@ -1,17 +1,26 @@
 import { NextRequest, NextResponse } from 'next/server';
 import connectDB from '@/lib/mongodb';
 import Communication from '@/models/Communication';
+import { isDatabaseAvailable } from '@/lib/database';
+import { demoData } from '@/lib/demo-data';
 
 // GET /api/communications - Get all communications
 export async function GET(request: NextRequest) {
+  const { searchParams } = new URL(request.url);
+  const client = searchParams.get('client');
+  const type = searchParams.get('type');
+  const employee = searchParams.get('employee');
+
+  if (!(await isDatabaseAvailable())) {
+    return NextResponse.json({
+      success: true,
+      data: demoData.listCollection('communications', { client, type, employee }),
+    });
+  }
+
   try {
     await connectDB();
-    
-    const { searchParams } = new URL(request.url);
-    const client = searchParams.get('client');
-    const type = searchParams.get('type');
-    const employee = searchParams.get('employee');
-    
+
     const query: any = {};
     if (client) query.client = client;
     if (type) query.type = type;
@@ -33,10 +42,18 @@ export async function GET(request: NextRequest) {
 
 // POST /api/communications - Create new communication
 export async function POST(request: NextRequest) {
+  const body = await request.json();
+
+  if (!(await isDatabaseAvailable())) {
+    return NextResponse.json(
+      { success: true, data: demoData.createCollectionItem('communications', body) },
+      { status: 201 }
+    );
+  }
+
   try {
     await connectDB();
-    const body = await request.json();
-    
+
     const communication = await Communication.create(body);
     await communication.populate('client employee');
     

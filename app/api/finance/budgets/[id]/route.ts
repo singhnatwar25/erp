@@ -1,16 +1,31 @@
 import { NextRequest, NextResponse } from 'next/server';
 import connectDB from '@/lib/mongodb';
 import { Budget } from '@/models/Finance';
+import { isDatabaseAvailable } from '@/lib/database';
+import { demoData } from '@/lib/demo-data';
 
 // GET /api/finance/budgets/[id] - Get single budget
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
+  const { id } = await params;
+
+  if (!(await isDatabaseAvailable())) {
+    const budget = demoData.getBudget(id);
+    if (!budget) {
+      return NextResponse.json(
+        { success: false, error: 'Budget not found' },
+        { status: 404 }
+      );
+    }
+    return NextResponse.json({ success: true, data: budget });
+  }
+
   try {
     await connectDB();
-    
-    const budget = await Budget.findById(params.id);
+
+    const budget = await Budget.findById(id);
     
     if (!budget) {
       return NextResponse.json(
@@ -31,15 +46,27 @@ export async function GET(
 // PUT /api/finance/budgets/[id] - Update budget
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
+  const body = await request.json();
+  const { id } = await params;
+
+  if (!(await isDatabaseAvailable())) {
+    const budget = demoData.updateBudget(id, body);
+    if (!budget) {
+      return NextResponse.json(
+        { success: false, error: 'Budget not found' },
+        { status: 404 }
+      );
+    }
+    return NextResponse.json({ success: true, data: budget });
+  }
+
   try {
     await connectDB();
-    
-    const body = await request.json();
-    
+
     const budget = await Budget.findByIdAndUpdate(
-      params.id,
+      id,
       body,
       { new: true, runValidators: true }
     );
@@ -63,12 +90,27 @@ export async function PUT(
 // DELETE /api/finance/budgets/[id] - Delete budget
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
+  const { id } = await params;
+
+  if (!(await isDatabaseAvailable())) {
+    const budget = demoData.deleteBudget(id);
+    if (!budget) {
+      return NextResponse.json(
+        { success: false, error: 'Budget not found' },
+        { status: 404 }
+      );
+    }
+    return NextResponse.json(
+      { success: true, message: 'Budget deleted successfully' }
+    );
+  }
+
   try {
     await connectDB();
-    
-    const budget = await Budget.findByIdAndDelete(params.id);
+
+    const budget = await Budget.findByIdAndDelete(id);
     
     if (!budget) {
       return NextResponse.json(

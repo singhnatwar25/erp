@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { 
   FolderKanban, 
@@ -60,11 +60,7 @@ export default function ProjectManagement() {
   const statusOptions = ['planning', 'in_progress', 'on_hold', 'completed', 'cancelled'];
   const priorityOptions = ['low', 'medium', 'high', 'urgent'];
 
-  useEffect(() => {
-    fetchProjects();
-  }, [filterStatus]);
-
-  const fetchProjects = async () => {
+  const fetchProjects = useCallback(async () => {
     try {
       const queryParams = filterStatus ? `?status=${filterStatus}` : '';
       const response = await fetch(`/api/projects${queryParams}`);
@@ -77,7 +73,11 @@ export default function ProjectManagement() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [filterStatus]);
+
+  useEffect(() => {
+    fetchProjects();
+  }, [fetchProjects]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

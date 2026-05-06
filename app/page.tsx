@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { 
   LayoutDashboard,
   FolderKanban, 
@@ -19,7 +19,7 @@ import {
   DollarSign,
   PieChart,
   CheckSquare,
-  Package
+  Building2
 } from 'lucide-react';
 
 // Types
@@ -38,7 +38,7 @@ interface Project {
 interface NavItem {
   label: string;
   icon: React.ElementType;
-  href: React.ComponentProps<typeof Link>['href'];
+  href: string;
   active?: boolean;
 }
 
@@ -177,7 +177,6 @@ const formatTimeAgo = (date: string) => {
 
 export default function Dashboard() {
   const [activeTab, setActiveTab] = useState('dashboard');
-  const [mounted, setMounted] = useState(false);
   const [stats, setStats] = useState({
     employees: 0,
     projects: 0,
@@ -194,12 +193,7 @@ export default function Dashboard() {
   const [departmentData, setDepartmentData] = useState<{name: string, count: number}[]>([]);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    setMounted(true);
-    fetchDashboardData();
-  }, []);
-
-  const fetchDashboardData = async () => {
+  const fetchDashboardData = useCallback(async () => {
     try {
       const response = await fetch('/api/dashboard');
       const data = await response.json();
@@ -213,7 +207,11 @@ export default function Dashboard() {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    fetchDashboardData();
+  }, [fetchDashboardData]);
 
   const navItems: NavItem[] = [
     { label: 'Dashboard', icon: LayoutDashboard, href: '/', active: activeTab === 'dashboard' },
@@ -221,9 +219,10 @@ export default function Dashboard() {
     { label: 'Projects', icon: FolderKanban, href: '/projects', active: activeTab === 'projects' },
     { label: 'Tasks', icon: CheckSquare, href: '/tasks', active: activeTab === 'tasks' },
     { label: 'Finance', icon: DollarSign, href: '/finance', active: activeTab === 'finance' },
+    { label: 'Company', icon: Building2, href: '/company', active: activeTab === 'company' },
   ];
 
-  if (!mounted || loading) {
+  if (loading) {
     return (
       <div className="min-h-screen bg-[#191E2C] flex items-center justify-center">
         <div className="flex items-center gap-3">
@@ -255,7 +254,7 @@ export default function Dashboard() {
                 return (
                   <Link
                     key={item.label}
-                    href={item.href}
+                    href={item.href as React.ComponentProps<typeof Link>['href']}
                     onClick={() => setActiveTab(item.label.toLowerCase())}
                     className={item.active ? 'nav-pill-active' : 'nav-pill'}
                   >

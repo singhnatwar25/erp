@@ -1,17 +1,26 @@
 import { NextRequest, NextResponse } from 'next/server';
 import connectDB from '@/lib/mongodb';
 import Asset from '@/models/Asset';
+import { isDatabaseAvailable } from '@/lib/database';
+import { demoData } from '@/lib/demo-data';
 
 // GET /api/assets - Get all assets
 export async function GET(request: NextRequest) {
+  const { searchParams } = new URL(request.url);
+  const status = searchParams.get('status');
+  const type = searchParams.get('type');
+  const assignedTo = searchParams.get('assignedTo');
+
+  if (!(await isDatabaseAvailable())) {
+    return NextResponse.json({
+      success: true,
+      data: demoData.listCollection('assets', { status, type, assignedTo }),
+    });
+  }
+
   try {
     await connectDB();
-    
-    const { searchParams } = new URL(request.url);
-    const status = searchParams.get('status');
-    const type = searchParams.get('type');
-    const assignedTo = searchParams.get('assignedTo');
-    
+
     const query: any = {};
     if (status) query.status = status;
     if (type) query.type = type;
@@ -32,10 +41,18 @@ export async function GET(request: NextRequest) {
 
 // POST /api/assets - Create new asset
 export async function POST(request: NextRequest) {
+  const body = await request.json();
+
+  if (!(await isDatabaseAvailable())) {
+    return NextResponse.json(
+      { success: true, data: demoData.createCollectionItem('assets', body) },
+      { status: 201 }
+    );
+  }
+
   try {
     await connectDB();
-    const body = await request.json();
-    
+
     const asset = await Asset.create(body);
     await asset.populate('assignedTo');
     

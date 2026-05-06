@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { 
   CheckSquare,
@@ -44,11 +44,7 @@ export default function TaskManagement() {
   const [editingTask, setEditingTask] = useState<Task | null>(null);
   const [timeTracking, setTimeTracking] = useState<{ taskId: string; hours: number; description: string } | null>(null);
 
-  useEffect(() => {
-    fetchTasks();
-  }, [filterStatus]);
-
-  const fetchTasks = async () => {
+  const fetchTasks = useCallback(async () => {
     try {
       const queryParams = filterStatus ? `?status=${filterStatus}` : '';
       const response = await fetch(`/api/tasks${queryParams}`);
@@ -61,7 +57,11 @@ export default function TaskManagement() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [filterStatus]);
+
+  useEffect(() => {
+    fetchTasks();
+  }, [fetchTasks]);
 
   const handleDelete = async (id: string) => {
     if (!confirm('Are you sure you want to delete this task?')) return;

@@ -6,30 +6,34 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "eslint .",
+    "db:check": "tsx scripts/check-db.ts",
+    "db:seed": "tsx scripts/seed-db.ts",
+    "test:smoke": "tsx scripts/smoke-test.ts"
   },
   "dependencies": {
+    "autoprefixer": "^10.4.0",
+    "bcryptjs": "^2.4.3",
+    "clsx": "^2.0.0",
+    "date-fns": "^3.0.0",
+    "jsonwebtoken": "^9.0.2",
+    "lucide-react": "^0.400.0",
+    "mongoose": "^8.0.0",
     "next": "16.0.0",
+    "postcss": "^8.4.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
-    "mongoose": "^8.0.0",
-    "bcryptjs": "^2.4.3",
-    "jsonwebtoken": "^9.0.2",
-    "tailwindcss": "^3.4.0",
-    "postcss": "^8.4.0",
-    "autoprefixer": "^10.4.0",
-    "lucide-react": "^0.400.0",
-    "date-fns": "^3.0.0",
     "recharts": "^2.10.0",
-    "clsx": "^2.0.0"
+    "tailwindcss": "^3.4.0"
   },
   "devDependencies": {
-    "@types/node": "^20.0.0",
-    "@types/react": "^19.0.0",
     "@types/bcryptjs": "^2.4.6",
     "@types/jsonwebtoken": "^9.0.5",
-    "typescript": "^5.0.0",
+    "@types/node": "^20.0.0",
+    "@types/react": "^19.0.0",
     "eslint": "^9.0.0",
-    "eslint-config-next": "16.0.0"
+    "eslint-config-next": "16.0.0",
+    "tsx": "^4.21.0",
+    "typescript": "^5.0.0"
   }
 }

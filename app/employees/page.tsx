@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { 
   Users, 
@@ -52,11 +52,7 @@ export default function EmployeeManagement() {
   const departments = ['Engineering', 'Sales', 'Marketing', 'HR', 'Finance', 'Operations', 'Support'];
   const statusOptions = ['active', 'inactive', 'on_leave'];
 
-  useEffect(() => {
-    fetchEmployees();
-  }, [filterDepartment]);
-
-  const fetchEmployees = async () => {
+  const fetchEmployees = useCallback(async () => {
     try {
       const queryParams = filterDepartment ? `?department=${filterDepartment}` : '';
       const response = await fetch(`/api/employees${queryParams}`);
@@ -69,7 +65,11 @@ export default function EmployeeManagement() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [filterDepartment]);
+
+  useEffect(() => {
+    fetchEmployees();
+  }, [fetchEmployees]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

@@ -1,13 +1,33 @@
 import { NextRequest, NextResponse } from 'next/server';
 import connectDB from '@/lib/mongodb';
 import Task from '@/models/Task';
+import { isDatabaseAvailable } from '@/lib/database';
+import { demoData } from '@/lib/demo-data';
+
+type TimeEntry = {
+  date?: Date | string;
+  hours: number;
+  description?: string;
+};
 
 // POST /api/tasks/time - Add time entry to task
 export async function POST(request: NextRequest) {
+  const { taskId, hours, description, date } = await request.json();
+
+  if (!(await isDatabaseAvailable())) {
+    const task = demoData.addTimeEntry({ taskId, hours, description, date });
+    if (!task) {
+      return NextResponse.json(
+        { success: false, error: 'Task not found' },
+        { status: 404 }
+      );
+    }
+    return NextResponse.json({ success: true, data: task });
+  }
+
   try {
     await connectDB();
-    const { taskId, hours, description, date } = await request.json();
-    
+
     const task = await Task.findById(taskId);
     if (!task) {
       return NextResponse.json(
@@ -24,7 +44,10 @@ export async function POST(request: NextRequest) {
     });
     
     // Update actual hours
-    task.actualHours = task.timeEntries.reduce((sum, entry) => sum + entry.hours, 0);
+    task.actualHours = task.timeEntries.reduce(
+      (sum: number, entry: TimeEntry) => sum + entry.hours,
+      0
+    );
     
     await task.save();
     
@@ -39,15 +62,22 @@ export async function POST(request: NextRequest) {
 
 // GET /api/tasks/time - Get time report
 export async function GET(request: NextRequest) {
+  const { searchParams } = new URL(request.url);
+  const employeeId = searchParams.get('employee');
+  const projectId = searchParams.get('project');
+  const startDate = searchParams.get('startDate');
+  const endDate = searchParams.get('endDate');
+
+  if (!(await isDatabaseAvailable())) {
+    return NextResponse.json({
+      success: true,
+      data: demoData.getTimeReport({ employeeId, projectId, startDate, endDate }),
+    });
+  }
+
   try {
     await connectDB();
-    
-    const { searchParams } = new URL(request.url);
-    const employeeId = searchParams.get('employee');
-    const projectId = searchParams.get('project');
-    const startDate = searchParams.get('startDate');
-    const endDate = searchParams.get('endDate');
-    
+
     const match: any = {};
     if (employeeId) match.assignedTo = employeeId;
     if (projectId) match.project = projectId;
@@ -62,8 +92,8 @@ export async function GET(request: NextRequest) {
     const timeByProject: Record<string, number> = {};
     
     tasks.forEach(task => {
-      task.timeEntries.forEach(entry => {
-        const entryDate = new Date(entry.date);
+      task.timeEntries.forEach((entry: TimeEntry) => {
+        const entryDate = new Date(entry.date ?? Date.now());
         if (startDate && entryDate < new Date(startDate)) return;
         if (endDate && entryDate > new Date(endDate)) return;
         

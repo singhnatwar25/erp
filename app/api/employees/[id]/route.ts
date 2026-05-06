@@ -1,16 +1,31 @@
 import { NextRequest, NextResponse } from 'next/server';
 import connectDB from '@/lib/mongodb';
 import Employee from '@/models/Employee';
+import { isDatabaseAvailable } from '@/lib/database';
+import { demoData } from '@/lib/demo-data';
 
 // GET /api/employees/[id] - Get single employee
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
+  const { id } = await params;
+
+  if (!(await isDatabaseAvailable())) {
+    const employee = demoData.getEmployee(id);
+    if (!employee) {
+      return NextResponse.json(
+        { success: false, error: 'Employee not found' },
+        { status: 404 }
+      );
+    }
+    return NextResponse.json({ success: true, data: employee });
+  }
+
   try {
     await connectDB();
-    
-    const employee = await Employee.findById(params.id);
+
+    const employee = await Employee.findById(id);
     
     if (!employee) {
       return NextResponse.json(
@@ -31,15 +46,27 @@ export async function GET(
 // PUT /api/employees/[id] - Update employee
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
+  const body = await request.json();
+  const { id } = await params;
+
+  if (!(await isDatabaseAvailable())) {
+    const employee = demoData.updateEmployee(id, body);
+    if (!employee) {
+      return NextResponse.json(
+        { success: false, error: 'Employee not found' },
+        { status: 404 }
+      );
+    }
+    return NextResponse.json({ success: true, data: employee });
+  }
+
   try {
     await connectDB();
-    
-    const body = await request.json();
-    
+
     const employee = await Employee.findByIdAndUpdate(
-      params.id,
+      id,
       body,
       { new: true, runValidators: true }
     );
@@ -63,12 +90,27 @@ export async function PUT(
 // DELETE /api/employees/[id] - Delete employee
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
+  const { id } = await params;
+
+  if (!(await isDatabaseAvailable())) {
+    const employee = demoData.deleteEmployee(id);
+    if (!employee) {
+      return NextResponse.json(
+        { success: false, error: 'Employee not found' },
+        { status: 404 }
+      );
+    }
+    return NextResponse.json(
+      { success: true, message: 'Employee deleted successfully' }
+    );
+  }
+
   try {
     await connectDB();
-    
-    const employee = await Employee.findByIdAndDelete(params.id);
+
+    const employee = await Employee.findByIdAndDelete(id);
     
     if (!employee) {
       return NextResponse.json(

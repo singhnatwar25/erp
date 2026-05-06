@@ -1,17 +1,26 @@
 import { NextRequest, NextResponse } from 'next/server';
 import connectDB from '@/lib/mongodb';
 import Attendance from '@/models/Attendance';
+import { isDatabaseAvailable } from '@/lib/database';
+import { demoData } from '@/lib/demo-data';
 
 // GET /api/hr/attendance - Get attendance records
 export async function GET(request: NextRequest) {
+  const { searchParams } = new URL(request.url);
+  const employee = searchParams.get('employee');
+  const startDate = searchParams.get('startDate');
+  const endDate = searchParams.get('endDate');
+
+  if (!(await isDatabaseAvailable())) {
+    return NextResponse.json({
+      success: true,
+      data: demoData.listCollection('attendance', { employee, startDate, endDate }),
+    });
+  }
+
   try {
     await connectDB();
-    
-    const { searchParams } = new URL(request.url);
-    const employee = searchParams.get('employee');
-    const startDate = searchParams.get('startDate');
-    const endDate = searchParams.get('endDate');
-    
+
     const query: any = {};
     if (employee) query.employee = employee;
     if (startDate || endDate) {
@@ -35,10 +44,18 @@ export async function GET(request: NextRequest) {
 
 // POST /api/hr/attendance - Mark attendance
 export async function POST(request: NextRequest) {
+  const body = await request.json();
+
+  if (!(await isDatabaseAvailable())) {
+    return NextResponse.json(
+      { success: true, data: demoData.createCollectionItem('attendance', body) },
+      { status: 201 }
+    );
+  }
+
   try {
     await connectDB();
-    const body = await request.json();
-    
+
     // Check if attendance already marked for this date
     const existing = await Attendance.findOne({
       employee: body.employee,

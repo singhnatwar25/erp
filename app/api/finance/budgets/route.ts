@@ -2,17 +2,26 @@ import { NextRequest, NextResponse } from 'next/server';
 import connectDB from '@/lib/mongodb';
 import { Budget } from '@/models/Finance';
 import { generateId } from '@/lib/utils';
+import { isDatabaseAvailable } from '@/lib/database';
+import { demoData } from '@/lib/demo-data';
 
 // GET /api/finance/budgets - Get all budgets
 export async function GET(request: NextRequest) {
+  const { searchParams } = new URL(request.url);
+  const department = searchParams.get('department');
+  const fiscalYear = searchParams.get('fiscalYear');
+
+  if (!(await isDatabaseAvailable())) {
+    return NextResponse.json({
+      success: true,
+      data: demoData.listBudgets({ department, fiscalYear }),
+    });
+  }
+
   try {
     await connectDB();
-    
-    const { searchParams } = new URL(request.url);
-    const department = searchParams.get('department');
-    const fiscalYear = searchParams.get('fiscalYear');
-    
-    let query: any = {};
+
+    const query: any = {};
     if (department) query.department = department;
     if (fiscalYear) query.fiscalYear = parseInt(fiscalYear);
     
@@ -29,11 +38,18 @@ export async function GET(request: NextRequest) {
 
 // POST /api/finance/budgets - Create new budget
 export async function POST(request: NextRequest) {
+  const body = await request.json();
+
+  if (!(await isDatabaseAvailable())) {
+    return NextResponse.json(
+      { success: true, data: demoData.createBudget(body) },
+      { status: 201 }
+    );
+  }
+
   try {
     await connectDB();
-    
-    const body = await request.json();
-    
+
     // Generate unique budget ID
     const budgetId = `BUD-${generateId().substring(0, 8).toUpperCase()}`;
     

@@ -3,9 +3,18 @@ import connectDB from '@/lib/mongodb';
 import Employee from '@/models/Employee';
 import Project from '@/models/Project';
 import { Transaction, Budget } from '@/models/Finance';
+import { isDatabaseAvailable } from '@/lib/database';
+import { demoData } from '@/lib/demo-data';
 
 // GET /api/dashboard - Get complete dashboard data
 export async function GET(request: NextRequest) {
+  if (!(await isDatabaseAvailable())) {
+    return NextResponse.json({
+      success: true,
+      data: demoData.dashboard(),
+    });
+  }
+
   try {
     await connectDB();
     
@@ -92,7 +101,7 @@ export async function GET(request: NextRequest) {
         id: p._id.toString(),
         type: 'project' as const,
         title: p.status === 'completed' ? 'Project Completed' : 'New Project Started',
-        description: `${p.name} ${p.status === 'completed' ? 'delivered' : 'for ${p.client}'}`,
+        description: `${p.name} ${p.status === 'completed' ? 'delivered' : `for ${p.client}`}`,
         date: p.createdAt,
       })),
       ...recentTransactions.map(t => ({

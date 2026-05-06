@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { 
   DollarSign, 
@@ -92,13 +92,7 @@ export default function FinanceManagement() {
   const statusOptions = ['pending', 'completed', 'cancelled'];
   const departments = ['Engineering', 'Sales', 'Marketing', 'HR', 'Finance', 'Operations', 'Support'];
 
-  useEffect(() => {
-    fetchDashboardData();
-    fetchTransactions();
-    fetchBudgets();
-  }, []);
-
-  const fetchDashboardData = async () => {
+  const fetchDashboardData = useCallback(async () => {
     try {
       const response = await fetch('/api/finance/dashboard');
       const data = await response.json();
@@ -108,9 +102,9 @@ export default function FinanceManagement() {
     } catch (error) {
       console.error('Error fetching dashboard:', error);
     }
-  };
+  }, []);
 
-  const fetchTransactions = async () => {
+  const fetchTransactions = useCallback(async () => {
     try {
       const queryParams = filterType ? `?type=${filterType}` : '';
       const response = await fetch(`/api/finance/transactions${queryParams}`);
@@ -123,9 +117,9 @@ export default function FinanceManagement() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [filterType]);
 
-  const fetchBudgets = async () => {
+  const fetchBudgets = useCallback(async () => {
     try {
       const response = await fetch('/api/finance/budgets');
       const data = await response.json();
@@ -135,7 +129,16 @@ export default function FinanceManagement() {
     } catch (error) {
       console.error('Error fetching budgets:', error);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    fetchDashboardData();
+    fetchBudgets();
+  }, [fetchDashboardData, fetchBudgets]);
+
+  useEffect(() => {
+    fetchTransactions();
+  }, [fetchTransactions]);
 
   const handleTransactionSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

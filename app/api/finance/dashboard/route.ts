@@ -1,9 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server';
 import connectDB from '@/lib/mongodb';
 import { Transaction, Budget } from '@/models/Finance';
+import { isDatabaseAvailable } from '@/lib/database';
+import { demoData } from '@/lib/demo-data';
 
 // GET /api/finance/dashboard - Get financial dashboard data
 export async function GET(request: NextRequest) {
+  if (!(await isDatabaseAvailable())) {
+    return NextResponse.json({
+      success: true,
+      data: demoData.financeDashboard(),
+    });
+  }
+
   try {
     await connectDB();
     
