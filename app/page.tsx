@@ -20,7 +20,8 @@ import {
   DollarSign,
   PieChart,
   CheckSquare,
-  Building2
+  Building2,
+  FileText
 } from 'lucide-react';
 
 // Types
@@ -128,6 +129,7 @@ export default function Dashboard() {
     { label: 'Projects', icon: FolderKanban, href: '/projects', active: activeTab === 'projects' },
     { label: 'Tasks', icon: CheckSquare, href: '/tasks', active: activeTab === 'tasks' },
     { label: 'Finance', icon: DollarSign, href: '/finance', active: activeTab === 'finance' },
+    { label: 'Bills', icon: FileText, href: '/bills', active: activeTab === 'bills' },
     { label: 'Company', icon: Building2, href: '/company', active: activeTab === 'company' },
   ];
 
