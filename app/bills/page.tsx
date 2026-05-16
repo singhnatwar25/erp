@@ -96,8 +96,11 @@ export default function BillManagement() {
   // Modal states
   const [showBillModal, setShowBillModal] = useState(false);
   const [showTemplateModal, setShowTemplateModal] = useState(false);
+  const [showPreviewModal, setShowPreviewModal] = useState(false);
   const [editingBill, setEditingBill] = useState<Bill | null>(null);
   const [editingTemplate, setEditingTemplate] = useState<BillTemplate | null>(null);
+  const [previewBill, setPreviewBill] = useState<Bill | null>(null);
+  const [selectedBills, setSelectedBills] = useState<string[]>([]);
   
   // Form states
   const [billForm, setBillForm] = useState({
@@ -120,6 +123,9 @@ export default function BillManagement() {
     description: '',
     fields: [] as BillField[],
   });
+
+  // Saved clients
+  const [savedClients, setSavedClients] = useState<{name: string, email: string, phone: string, address: string}[]>([]);
 
   const fetchBills = useCallback(async () => {
     try {
@@ -204,6 +210,122 @@ export default function BillManagement() {
     }
   };
 
+  const handleDuplicateBill = (bill: Bill) => {
+    setEditingBill(null);
+    setBillForm({
+      templateId: bill.templateId,
+      clientName: bill.clientName,
+      clientEmail: bill.clientEmail || '',
+      clientPhone: bill.clientPhone || '',
+      clientAddress: bill.clientAddress || '',
+      billNumber: '',
+      issueDate: new Date().toISOString().split('T')[0],
+      dueDate: '',
+      taxRate: bill.taxRate.toString(),
+      notes: bill.notes || '',
+      items: bill.items,
+      customFields: bill.customFields || {},
+    });
+    setShowBillModal(true);
+  };
+
+  const handleStatusChange = async (billId: string, newStatus: string) => {
+    try {
+      const response = await fetch(`/api/bills/${billId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: newStatus }),
+      });
+      if (response.ok) {
+        fetchBills();
+      }
+    } catch (error) {
+      console.error('Error updating status:', error);
+    }
+  };
+
+  const handlePreviewBill = (bill: Bill) => {
+    setPreviewBill(bill);
+    setShowPreviewModal(true);
+  };
+
+  const handleSaveClient = () => {
+    if (!billForm.clientName) return;
+    
+    const newClient = {
+      name: billForm.clientName,
+      email: billForm.clientEmail,
+      phone: billForm.clientPhone,
+      address: billForm.clientAddress,
+    };
+    
+    const existingIndex = savedClients.findIndex(c => c.name === newClient.name);
+    if (existingIndex === -1) {
+      setSavedClients([...savedClients, newClient]);
+    }
+  };
+
+  const handleSelectClient = (client: any) => {
+    setBillForm({
+      ...billForm,
+      clientName: client.name,
+      clientEmail: client.email,
+      clientPhone: client.phone,
+      clientAddress: client.address,
+    });
+  };
+
+  const handleToggleBillSelection = (billId: string) => {
+    setSelectedBills(prev => 
+      prev.includes(billId) ? prev.filter(id => id !== billId) : [...prev, billId]
+    );
+  };
+
+  const handleBulkStatusChange = async (newStatus: string) => {
+    if (selectedBills.length === 0) return;
+    
+    try {
+      await Promise.all(
+        selectedBills.map(id => 
+          fetch(`/api/bills/${id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ status: newStatus }),
+          })
+        )
+      );
+      setSelectedBills([]);
+      fetchBills();
+    } catch (error) {
+      console.error('Error bulk updating status:', error);
+    }
+  };
+
+  const handleExportCSV = () => {
+    const headers = ['Bill ID', 'Client', 'Email', 'Bill Number', 'Issue Date', 'Due Date', 'Status', 'Subtotal', 'Tax', 'Total'];
+    const rows = filteredBills.map(bill => [
+      bill.billId,
+      bill.clientName,
+      bill.clientEmail || '',
+      bill.billNumber,
+      bill.issueDate,
+      bill.dueDate,
+      bill.status,
+      bill.subtotal,
+      bill.taxAmount,
+      bill.total,
+    ]);
+    
+    const csvContent = [headers, ...rows].map(row => row.join(',')).join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'bills-export.csv';
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   const handleDownloadPDF = async (bill: Bill) => {
     try {
       const billData: BillData = {
@@ -260,12 +382,17 @@ export default function BillManagement() {
         body: JSON.stringify(payload),
       });
       
+      const result = await response.json();
+      
       if (response.ok) {
         setShowBillModal(false);
         fetchBills();
+      } else {
+        alert(`Failed to save bill: ${result.error || 'Unknown error'}`);
       }
     } catch (error) {
       console.error('Error saving bill:', error);
+      alert('Failed to save bill. Please check your connection.');
     }
   };
 
@@ -349,7 +476,7 @@ export default function BillManagement() {
             <span>Dashboard</span>
           </Link>
           <Link
-            href="/bills" as any
+            href={{ pathname: '/bills' }}
             className="flex items-center gap-3 px-4 py-3 rounded-xl transition-colors bg-[#B9FF66] text-[#191E2C] font-medium"
           >
             <FileText className="h-5 w-5" />
@@ -436,7 +563,41 @@ export default function BillManagement() {
                 <option value="overdue">Overdue</option>
                 <option value="cancelled">Cancelled</option>
               </select>
+              <button
+                onClick={handleExportCSV}
+                className="btn-dark flex items-center gap-2"
+              >
+                <Download className="h-4 w-4" />
+                <span>Export CSV</span>
+              </button>
             </div>
+
+            {/* Bulk Actions */}
+            {selectedBills.length > 0 && (
+              <div className="card-dark p-4 mb-6 flex items-center justify-between">
+                <span className="text-white">{selectedBills.length} bills selected</span>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => handleBulkStatusChange('sent')}
+                    className="btn-dark text-sm"
+                  >
+                    Mark as Sent
+                  </button>
+                  <button
+                    onClick={() => handleBulkStatusChange('paid')}
+                    className="btn-dark text-sm"
+                  >
+                    Mark as Paid
+                  </button>
+                  <button
+                    onClick={() => setSelectedBills([])}
+                    className="btn-dark text-sm text-[#C55050]"
+                  >
+                    Clear Selection
+                  </button>
+                </div>
+              </div>
+            )}
 
             {/* Bills List */}
             <div className="card-dark">
@@ -444,6 +605,20 @@ export default function BillManagement() {
                 <table className="w-full">
                   <thead>
                     <tr className="border-b border-white/5">
+                      <th className="text-left p-4 text-[#94A3B8] font-medium">
+                        <input
+                          type="checkbox"
+                          checked={selectedBills.length === filteredBills.length && filteredBills.length > 0}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setSelectedBills(filteredBills.map(b => b._id));
+                            } else {
+                              setSelectedBills([]);
+                            }
+                          }}
+                          className="w-4 h-4 rounded border-white/20 bg-[#252B3D] text-[#B9FF66] focus:ring-[#B9FF66]"
+                        />
+                      </th>
                       <th className="text-left p-4 text-[#94A3B8] font-medium">Bill #</th>
                       <th className="text-left p-4 text-[#94A3B8] font-medium">Client</th>
                       <th className="text-left p-4 text-[#94A3B8] font-medium">Template</th>
@@ -457,6 +632,14 @@ export default function BillManagement() {
                   <tbody>
                     {filteredBills.map((bill) => (
                       <tr key={bill._id} className="border-b border-white/5 hover:bg-white/5">
+                        <td className="p-4">
+                          <input
+                            type="checkbox"
+                            checked={selectedBills.includes(bill._id)}
+                            onChange={() => handleToggleBillSelection(bill._id)}
+                            className="w-4 h-4 rounded border-white/20 bg-[#252B3D] text-[#B9FF66] focus:ring-[#B9FF66]"
+                          />
+                        </td>
                         <td className="p-4">
                           <span className="font-mono text-sm text-white">{bill.billId}</span>
                         </td>
@@ -481,33 +664,52 @@ export default function BillManagement() {
                           <span className="font-medium text-white">{formatCurrency(bill.total)}</span>
                         </td>
                         <td className="p-4">
-                          <span 
-                            className="px-2 py-1 rounded-full text-xs font-medium"
-                            style={{ 
-                              backgroundColor: `${getStatusColor(bill.status)}20`,
-                              color: getStatusColor(bill.status)
-                            }}
+                          <select
+                            value={bill.status}
+                            onChange={(e) => handleStatusChange(bill._id, e.target.value)}
+                            className="input-dark text-xs py-1 px-2"
                           >
-                            {bill.status}
-                          </span>
+                            <option value="draft">Draft</option>
+                            <option value="sent">Sent</option>
+                            <option value="paid">Paid</option>
+                            <option value="overdue">Overdue</option>
+                            <option value="cancelled">Cancelled</option>
+                          </select>
                         </td>
                         <td className="p-4">
                           <div className="flex items-center gap-2">
                             <button
                               onClick={() => handleEditBill(bill)}
                               className="w-8 h-8 rounded-lg bg-[#3D55B6]/20 text-[#8BA4FF] flex items-center justify-center hover:bg-[#3D55B6]/30"
+                              title="Edit"
                             >
                               <Edit className="w-4 h-4" />
                             </button>
                             <button
+                              onClick={() => handleDuplicateBill(bill)}
+                              className="w-8 h-8 rounded-lg bg-[#BC5FCF]/20 text-[#D9A0FF] flex items-center justify-center hover:bg-[#BC5FCF]/30"
+                              title="Duplicate"
+                            >
+                              <Plus className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={() => handlePreviewBill(bill)}
+                              className="w-8 h-8 rounded-lg bg-[#459BBE]/20 text-[#7DD3E8] flex items-center justify-center hover:bg-[#459BBE]/30"
+                              title="Preview"
+                            >
+                              <Eye className="w-4 h-4" />
+                            </button>
+                            <button
                               onClick={() => handleDownloadPDF(bill)}
                               className="w-8 h-8 rounded-lg bg-[#4E956A]/20 text-[#7DD3A0] flex items-center justify-center hover:bg-[#4E956A]/30"
+                              title="Download PDF"
                             >
                               <Download className="w-4 h-4" />
                             </button>
                             <button
                               onClick={() => handleDeleteBill(bill._id)}
                               className="w-8 h-8 rounded-lg bg-[#C55050]/20 text-[#FF9B9B] flex items-center justify-center hover:bg-[#C55050]/30"
+                              title="Delete"
                             >
                               <Trash2 className="w-4 h-4" />
                             </button>
@@ -625,45 +827,73 @@ export default function BillManagement() {
                   </div>
 
                   {/* Client Information */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-sm text-[#94A3B8] mb-2">Client Name *</label>
-                      <input
-                        type="text"
-                        value={billForm.clientName}
-                        onChange={(e) => setBillForm({ ...billForm, clientName: e.target.value })}
-                        className="input-dark w-full"
-                        required
-                      />
+                  <div>
+                    <div className="flex items-center justify-between mb-2">
+                      <label className="block text-sm text-[#94A3B8]">Client Information</label>
+                      {savedClients.length > 0 && (
+                        <select
+                          onChange={(e) => {
+                            if (e.target.value) {
+                              const client = savedClients.find(c => c.name === e.target.value);
+                              if (client) handleSelectClient(client);
+                            }
+                          }}
+                          className="input-dark text-xs py-1 px-2"
+                        >
+                          <option value="">Select saved client</option>
+                          {savedClients.map((client, idx) => (
+                            <option key={idx} value={client.name}>{client.name}</option>
+                          ))}
+                        </select>
+                      )}
                     </div>
-                    <div>
-                      <label className="block text-sm text-[#94A3B8] mb-2">Client Email</label>
-                      <input
-                        type="email"
-                        value={billForm.clientEmail}
-                        onChange={(e) => setBillForm({ ...billForm, clientEmail: e.target.value })}
-                        className="input-dark w-full"
-                      />
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm text-[#94A3B8] mb-2">Client Name *</label>
+                        <input
+                          type="text"
+                          value={billForm.clientName}
+                          onChange={(e) => setBillForm({ ...billForm, clientName: e.target.value })}
+                          className="input-dark w-full"
+                          required
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm text-[#94A3B8] mb-2">Client Email</label>
+                        <input
+                          type="email"
+                          value={billForm.clientEmail}
+                          onChange={(e) => setBillForm({ ...billForm, clientEmail: e.target.value })}
+                          className="input-dark w-full"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm text-[#94A3B8] mb-2">Client Phone</label>
+                        <input
+                          type="tel"
+                          value={billForm.clientPhone}
+                          onChange={(e) => setBillForm({ ...billForm, clientPhone: e.target.value })}
+                          className="input-dark w-full"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm text-[#94A3B8] mb-2">Bill Number *</label>
+                        <input
+                          type="text"
+                          value={billForm.billNumber}
+                          onChange={(e) => setBillForm({ ...billForm, billNumber: e.target.value })}
+                          className="input-dark w-full"
+                          required
+                        />
+                      </div>
                     </div>
-                    <div>
-                      <label className="block text-sm text-[#94A3B8] mb-2">Client Phone</label>
-                      <input
-                        type="tel"
-                        value={billForm.clientPhone}
-                        onChange={(e) => setBillForm({ ...billForm, clientPhone: e.target.value })}
-                        className="input-dark w-full"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm text-[#94A3B8] mb-2">Bill Number *</label>
-                      <input
-                        type="text"
-                        value={billForm.billNumber}
-                        onChange={(e) => setBillForm({ ...billForm, billNumber: e.target.value })}
-                        className="input-dark w-full"
-                        required
-                      />
-                    </div>
+                    <button
+                      type="button"
+                      onClick={handleSaveClient}
+                      className="mt-2 btn-dark text-sm"
+                    >
+                      Save Client for Future Use
+                    </button>
                   </div>
 
                   {/* Dates */}
@@ -802,6 +1032,289 @@ export default function BillManagement() {
                   </button>
                 </div>
               </form>
+            </div>
+          </div>
+        )}
+
+        {/* Preview Modal */}
+        {showPreviewModal && previewBill && (
+          <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+            <div className="bg-white rounded-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+              <div className="p-6 border-b border-gray-200 flex items-center justify-between">
+                <h2 className="text-xl font-bold text-gray-900">Bill Preview</h2>
+                <button
+                  onClick={() => setShowPreviewModal(false)}
+                  className="w-8 h-8 rounded-lg bg-gray-100 flex items-center justify-center hover:bg-gray-200"
+                >
+                  <X className="h-5 w-5 text-gray-600" />
+                </button>
+              </div>
+              
+              <div className="p-8">
+                <div className="mb-8">
+                  <h1 className="text-3xl font-bold text-gray-900 mb-2">INVOICE</h1>
+                  <p className="text-gray-600">Bill #{previewBill.billNumber}</p>
+                </div>
+
+                <div className="grid grid-cols-2 gap-8 mb-8">
+                  <div>
+                    <h3 className="font-semibold text-gray-900 mb-2">Bill To:</h3>
+                    <p className="text-gray-700">{previewBill.clientName}</p>
+                    {previewBill.clientEmail && <p className="text-gray-600">{previewBill.clientEmail}</p>}
+                    {previewBill.clientPhone && <p className="text-gray-600">{previewBill.clientPhone}</p>}
+                  </div>
+                  <div className="text-right">
+                    <p className="text-gray-600"><strong>Issue Date:</strong> {formatDate(previewBill.issueDate)}</p>
+                    <p className="text-gray-600"><strong>Due Date:</strong> {formatDate(previewBill.dueDate)}</p>
+                    <p className="text-gray-600"><strong>Status:</strong> {previewBill.status.toUpperCase()}</p>
+                  </div>
+                </div>
+
+                <table className="w-full mb-8">
+                  <thead>
+                    <tr className="border-b-2 border-gray-200">
+                      <th className="text-left py-3 text-gray-700">Description</th>
+                      <th className="text-right py-3 text-gray-700">Quantity</th>
+                      <th className="text-right py-3 text-gray-700">Unit Price</th>
+                      <th className="text-right py-3 text-gray-700">Total</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {previewBill.items.map((item, index) => (
+                      <tr key={index} className="border-b border-gray-100">
+                        <td className="py-3 text-gray-700">{item.description}</td>
+                        <td className="py-3 text-right text-gray-700">{item.quantity}</td>
+                        <td className="py-3 text-right text-gray-700">{formatCurrency(item.unitPrice)}</td>
+                        <td className="py-3 text-right text-gray-700">{formatCurrency(item.total)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+
+                <div className="flex justify-end mb-8">
+                  <div className="w-64">
+                    <div className="flex justify-between mb-2">
+                      <span className="text-gray-600">Subtotal:</span>
+                      <span className="text-gray-900">{formatCurrency(previewBill.subtotal)}</span>
+                    </div>
+                    {previewBill.taxRate > 0 && (
+                      <div className="flex justify-between mb-2">
+                        <span className="text-gray-600">Tax ({previewBill.taxRate}%):</span>
+                        <span className="text-gray-900">{formatCurrency(previewBill.taxAmount)}</span>
+                      </div>
+                    )}
+                    <div className="flex justify-between pt-2 border-t-2 border-gray-200">
+                      <span className="font-semibold text-gray-900">Total:</span>
+                      <span className="font-bold text-gray-900">{formatCurrency(previewBill.total)}</span>
+                    </div>
+                  </div>
+                </div>
+
+                {previewBill.notes && (
+                  <div className="mb-8">
+                    <h3 className="font-semibold text-gray-900 mb-2">Notes:</h3>
+                    <p className="text-gray-600">{previewBill.notes}</p>
+                  </div>
+                )}
+
+                <div className="flex justify-end gap-3">
+                  <button
+                    onClick={() => setShowPreviewModal(false)}
+                    className="px-4 py-2 rounded-lg bg-gray-100 text-gray-700 hover:bg-gray-200"
+                  >
+                    Close
+                  </button>
+                  <button
+                    onClick={() => {
+                      handleDownloadPDF(previewBill);
+                      setShowPreviewModal(false);
+                    }}
+                    className="px-4 py-2 rounded-lg bg-[#B9FF66] text-gray-900 hover:bg-[#A8E658]"
+                  >
+                    Download PDF
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Template Modal */}
+        {showTemplateModal && (
+          <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+            <div className="bg-[#252B3D] rounded-2xl max-w-3xl w-full max-h-[90vh] overflow-y-auto">
+              <div className="p-6 border-b border-white/10">
+                <h2 className="text-xl font-bold text-white">Create Custom Template</h2>
+              </div>
+              
+              <div className="p-6 space-y-6">
+                <div>
+                  <label className="block text-sm text-[#94A3B8] mb-2">Template Name *</label>
+                  <input
+                    type="text"
+                    value={templateForm.name}
+                    onChange={(e) => setTemplateForm({ ...templateForm, name: e.target.value })}
+                    className="input-dark w-full"
+                    placeholder="e.g., Service Invoice, Product Invoice"
+                    required
+                  />
+                </div>
+                
+                <div>
+                  <label className="block text-sm text-[#94A3B8] mb-2">Description</label>
+                  <textarea
+                    value={templateForm.description}
+                    onChange={(e) => setTemplateForm({ ...templateForm, description: e.target.value })}
+                    className="input-dark w-full h-20"
+                    placeholder="Describe when to use this template..."
+                  />
+                </div>
+
+                <div>
+                  <div className="flex items-center justify-between mb-4">
+                    <label className="block text-sm text-[#94A3B8]">Custom Fields</label>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const newField: BillField = {
+                          id: `field-${Date.now()}`,
+                          name: `field_${templateForm.fields.length + 1}`,
+                          label: 'New Field',
+                          type: 'text',
+                          required: false,
+                          order: templateForm.fields.length + 1,
+                        };
+                        setTemplateForm({
+                          ...templateForm,
+                          fields: [...templateForm.fields, newField],
+                        });
+                      }}
+                      className="btn-lime text-sm"
+                    >
+                      <Plus className="h-4 w-4" />
+                      Add Field
+                    </button>
+                  </div>
+
+                  <div className="space-y-3">
+                    {templateForm.fields.map((field, index) => (
+                      <div key={field.id} className="card-dark p-4">
+                        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                          <div className="md:col-span-2">
+                            <label className="block text-xs text-[#64748B] mb-1">Field Label</label>
+                            <input
+                              type="text"
+                              value={field.label}
+                              onChange={(e) => {
+                                const fields = [...templateForm.fields];
+                                fields[index].label = e.target.value;
+                                fields[index].name = e.target.value.toLowerCase().replace(/\s+/g, '_');
+                                setTemplateForm({ ...templateForm, fields });
+                              }}
+                              className="input-dark w-full"
+                              placeholder="Field Label"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-xs text-[#64748B] mb-1">Field Type</label>
+                            <select
+                              value={field.type}
+                              onChange={(e) => {
+                                const fields = [...templateForm.fields];
+                                fields[index].type = e.target.value as BillField['type'];
+                                setTemplateForm({ ...templateForm, fields });
+                              }}
+                              className="input-dark w-full"
+                            >
+                              <option value="text">Text</option>
+                              <option value="number">Number</option>
+                              <option value="date">Date</option>
+                              <option value="email">Email</option>
+                              <option value="phone">Phone</option>
+                              <option value="address">Address</option>
+                              <option value="select">Select</option>
+                              <option value="textarea">Textarea</option>
+                              <option value="checkbox">Checkbox</option>
+                            </select>
+                          </div>
+                          <div className="flex items-end">
+                            <label className="flex items-center gap-2 cursor-pointer">
+                              <input
+                                type="checkbox"
+                                checked={field.required}
+                                onChange={(e) => {
+                                  const fields = [...templateForm.fields];
+                                  fields[index].required = e.target.checked;
+                                  setTemplateForm({ ...templateForm, fields });
+                                }}
+                                className="w-4 h-4 rounded border-white/20 bg-[#252B3D] text-[#B9FF66]"
+                              />
+                              <span className="text-sm text-[#94A3B8]">Required</span>
+                            </label>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const fields = templateForm.fields.filter((_, i) => i !== index);
+                                setTemplateForm({ ...templateForm, fields });
+                              }}
+                              className="ml-auto w-8 h-8 rounded-lg bg-[#C55050]/20 text-[#FF9B9B] flex items-center justify-center hover:bg-[#C55050]/30"
+                            >
+                              <X className="h-4 w-4" />
+                            </button>
+                          </div>
+                        </div>
+                        
+                        {field.type === 'select' && (
+                          <div className="mt-3">
+                            <label className="block text-xs text-[#64748B] mb-1">Options (comma separated)</label>
+                            <input
+                              type="text"
+                              value={field.options?.join(', ') || ''}
+                              onChange={(e) => {
+                                const fields = [...templateForm.fields];
+                                fields[index].options = e.target.value.split(',').map(o => o.trim());
+                                setTemplateForm({ ...templateForm, fields });
+                              }}
+                              className="input-dark w-full"
+                              placeholder="Option 1, Option 2, Option 3"
+                            />
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              <div className="p-6 border-t border-white/10 flex justify-end gap-3">
+                <button
+                  onClick={() => setShowTemplateModal(false)}
+                  className="btn-dark"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={async () => {
+                    try {
+                      const response = await fetch('/api/bills/templates', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(templateForm),
+                      });
+                      if (response.ok) {
+                        setShowTemplateModal(false);
+                        setTemplateForm({ name: '', description: '', fields: [] });
+                        fetchTemplates();
+                      }
+                    } catch (error) {
+                      console.error('Error creating template:', error);
+                    }
+                  }}
+                  className="btn-lime"
+                >
+                  Create Template
+                </button>
+              </div>
             </div>
           </div>
         )}
