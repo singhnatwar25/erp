@@ -1,24 +1,10 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
-import Link from 'next/link';
-import { 
-  FolderKanban, 
-  Plus, 
-  Search, 
-  Filter, 
-  Edit2, 
-  Trash2, 
-  ArrowLeft,
-  Calendar,
-  Users,
-  DollarSign,
-  Clock,
-  CheckCircle2,
-  AlertCircle
-} from 'lucide-react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Edit2, Plus, Search, Trash2 } from 'lucide-react';
+import { Badge, EmptyState, ERPShell, Panel, money } from '@/app/components/erp-shell';
 
-interface Project {
+type Project = {
   _id: string;
   projectId: string;
   name: string;
@@ -30,521 +16,206 @@ interface Project {
   endDate: string;
   budget: number;
   progress: number;
-  assignedEmployees: string[];
   projectManager: string;
+  assignedEmployees: string[];
   technologies: string[];
-}
+};
 
-export default function ProjectManagement() {
+const emptyForm = {
+  name: '',
+  description: '',
+  client: '',
+  status: 'planning',
+  priority: 'medium',
+  startDate: new Date().toISOString().slice(0, 10),
+  endDate: new Date().toISOString().slice(0, 10),
+  budget: '',
+  progress: '0',
+  projectManager: '',
+  assignedEmployees: '',
+  technologies: '',
+};
+
+export default function ProjectsPage() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [filterStatus, setFilterStatus] = useState('');
-  const [showModal, setShowModal] = useState(false);
-  const [editingProject, setEditingProject] = useState<Project | null>(null);
-  const [formData, setFormData] = useState({
-    name: '',
-    description: '',
-    client: '',
-    status: 'planning',
-    priority: 'medium',
-    startDate: '',
-    endDate: '',
-    budget: '',
-    projectManager: '',
-    assignedEmployees: '',
-    technologies: '',
-    progress: '0',
-  });
-
-  const statusOptions = ['planning', 'in_progress', 'on_hold', 'completed', 'cancelled'];
-  const priorityOptions = ['low', 'medium', 'high', 'urgent'];
+  const [query, setQuery] = useState('');
+  const [editing, setEditing] = useState<Project | null>(null);
+  const [showForm, setShowForm] = useState(false);
+  const [form, setForm] = useState(emptyForm);
 
   const fetchProjects = useCallback(async () => {
-    try {
-      const queryParams = filterStatus ? `?status=${filterStatus}` : '';
-      const response = await fetch(`/api/projects${queryParams}`);
-      const data = await response.json();
-      if (data.success) {
-        setProjects(data.data);
-      }
-    } catch (error) {
-      console.error('Error fetching projects:', error);
-    } finally {
-      setLoading(false);
-    }
-  }, [filterStatus]);
+    const response = await fetch('/api/projects');
+    const payload = await response.json();
+    if (payload.success) setProjects(payload.data);
+    setLoading(false);
+  }, []);
 
   useEffect(() => {
     fetchProjects();
   }, [fetchProjects]);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    try {
-      const url = editingProject 
-        ? `/api/projects/${editingProject._id}` 
-        : '/api/projects';
-      const method = editingProject ? 'PUT' : 'POST';
-      
-      const response = await fetch(url, {
-        method,
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ...formData,
-          budget: Number(formData.budget),
-          progress: Number(formData.progress),
-          assignedEmployees: formData.assignedEmployees.split(',').map(s => s.trim()).filter(Boolean),
-          technologies: formData.technologies.split(',').map(s => s.trim()).filter(Boolean),
-        }),
-      });
+  const filtered = useMemo(
+    () => projects.filter((project) => `${project.name} ${project.client} ${project.projectManager}`.toLowerCase().includes(query.toLowerCase())),
+    [projects, query]
+  );
 
-      const data = await response.json();
-      if (data.success) {
-        setShowModal(false);
-        setEditingProject(null);
-        resetForm();
-        fetchProjects();
-      }
-    } catch (error) {
-      console.error('Error saving project:', error);
-    }
+  const startCreate = () => {
+    setEditing(null);
+    setForm(emptyForm);
+    setShowForm(true);
   };
 
-  const handleDelete = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this project?')) return;
-    
-    try {
-      const response = await fetch(`/api/projects/${id}`, {
-        method: 'DELETE',
-      });
-      const data = await response.json();
-      if (data.success) {
-        fetchProjects();
-      }
-    } catch (error) {
-      console.error('Error deleting project:', error);
-    }
-  };
-
-  const handleEdit = (project: Project) => {
-    setEditingProject(project);
-    setFormData({
+  const startEdit = (project: Project) => {
+    setEditing(project);
+    setForm({
       name: project.name,
       description: project.description,
       client: project.client,
       status: project.status,
       priority: project.priority,
-      startDate: project.startDate.split('T')[0],
-      endDate: project.endDate.split('T')[0],
-      budget: project.budget.toString(),
+      startDate: project.startDate?.slice(0, 10) || emptyForm.startDate,
+      endDate: project.endDate?.slice(0, 10) || emptyForm.endDate,
+      budget: String(project.budget ?? ''),
+      progress: String(project.progress ?? 0),
       projectManager: project.projectManager,
-      assignedEmployees: project.assignedEmployees.join(', '),
-      technologies: project.technologies.join(', '),
-      progress: project.progress.toString(),
+      assignedEmployees: project.assignedEmployees?.join(', ') ?? '',
+      technologies: project.technologies?.join(', ') ?? '',
     });
-    setShowModal(true);
+    setShowForm(true);
   };
 
-  const resetForm = () => {
-    setFormData({
-      name: '',
-      description: '',
-      client: '',
-      status: 'planning',
-      priority: 'medium',
-      startDate: '',
-      endDate: '',
-      budget: '',
-      projectManager: '',
-      assignedEmployees: '',
-      technologies: '',
-      progress: '0',
+  const saveProject = async (event: React.FormEvent) => {
+    event.preventDefault();
+    const response = await fetch(editing ? `/api/projects/${editing._id}` : '/api/projects', {
+      method: editing ? 'PUT' : 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        ...form,
+        budget: Number(form.budget || 0),
+        progress: Number(form.progress || 0),
+        assignedEmployees: form.assignedEmployees.split(',').map((item) => item.trim()).filter(Boolean),
+        technologies: form.technologies.split(',').map((item) => item.trim()).filter(Boolean),
+      }),
     });
+    const payload = await response.json();
+    if (payload.success) {
+      setShowForm(false);
+      await fetchProjects();
+    }
   };
 
-  const openAddModal = () => {
-    setEditingProject(null);
-    resetForm();
-    setShowModal(true);
-  };
-
-  const filteredProjects = projects.filter(project => 
-    project.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    project.client.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    project.projectManager.toLowerCase().includes(searchTerm.toLowerCase())
-  );
-
-  const getStatusBadge = (status: string) => {
-    const classes: Record<string, string> = {
-      planning: 'bg-[#459BBE]/20 text-[#8DD4F0] ring-1 ring-[#459BBE]/30',
-      in_progress: 'bg-[#B9FF66]/20 text-[#B9FF66] ring-1 ring-[#B9FF66]/30',
-      on_hold: 'bg-[#DC6F31]/20 text-[#FFB088] ring-1 ring-[#DC6F31]/30',
-      completed: 'bg-[#4E956A]/20 text-[#8FD9B0] ring-1 ring-[#4E956A]/30',
-      cancelled: 'bg-[#C55050]/20 text-[#FF9B9B] ring-1 ring-[#C55050]/30',
-    };
-    return (
-      <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold ${classes[status] || classes.planning}`}>
-        {status.replace('_', ' ')}
-      </span>
-    );
-  };
-
-  const getPriorityBadge = (priority: string) => {
-    const classes: Record<string, string> = {
-      low: 'bg-[#64748B]/20 text-[#94A3B8] ring-1 ring-[#64748B]/30',
-      medium: 'bg-[#459BBE]/20 text-[#8DD4F0] ring-1 ring-[#459BBE]/30',
-      high: 'bg-[#DC6F31]/20 text-[#FFB088] ring-1 ring-[#DC6F31]/30',
-      urgent: 'bg-[#C55050]/20 text-[#FF9B9B] ring-1 ring-[#C55050]/30',
-    };
-    return (
-      <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold ${classes[priority]}`}>
-        {priority}
-      </span>
-    );
-  };
-
-  const getStatusColor = (status: string) => {
-    const colors: Record<string, string> = {
-      planning: '#459BBE',
-      in_progress: '#B9FF66',
-      on_hold: '#DC6F31',
-      completed: '#4E956A',
-      cancelled: '#C55050',
-    };
-    return colors[status] || '#459BBE';
+  const deleteProject = async (project: Project) => {
+    if (!confirm(`Delete ${project.name}?`)) return;
+    await fetch(`/api/projects/${project._id}`, { method: 'DELETE' });
+    fetchProjects();
   };
 
   return (
-    <div className="min-h-screen bg-[#191E2C]">
-      {/* Header */}
-      <nav className="sticky top-0 z-50 bg-[#191E2C]/95 backdrop-blur-sm border-b border-white/5">
-        <div className="max-w-[1600px] mx-auto px-6 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <Link href="/" className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-[#B9FF66] flex items-center justify-center">
-                  <FolderKanban className="h-5 w-5 text-[#191E2C]" />
-                </div>
-                <div>
-                  <h1 className="text-xl font-bold text-white">Projects</h1>
-                  <p className="text-xs text-[#64748B]">Track and manage projects</p>
-                </div>
-              </Link>
+    <ERPShell
+      title="Projects"
+      description="Manage delivery, client work, progress, budgets, and project ownership."
+      action={<button onClick={startCreate} className="btn-lime rounded-lg px-4"><Plus className="h-4 w-4" />Add project</button>}
+    >
+      <div className="grid grid-cols-1 gap-5 xl:grid-cols-[1fr_420px]">
+        <div className="space-y-5">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
+            <Metric label="Total" value={projects.length} />
+            <Metric label="In progress" value={projects.filter((p) => p.status === 'in_progress').length} tone="up" />
+            <Metric label="Completed" value={projects.filter((p) => p.status === 'completed').length} tone="up" />
+            <Metric label="Budget" value={money(projects.reduce((sum, p) => sum + Number(p.budget || 0), 0))} />
+          </div>
+          <Panel>
+            <div className="relative mb-4">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#6b7280]" />
+              <input className="input-dark pl-10" placeholder="Search projects" value={query} onChange={(e) => setQuery(e.target.value)} />
             </div>
-            <button
-              onClick={openAddModal}
-              className="btn-lime"
-            >
-              <Plus className="h-4 w-4" />
-              <span className="hidden sm:inline">Add Project</span>
-            </button>
-          </div>
-        </div>
-      </nav>
-
-      {/* Main Content */}
-      <main className="max-w-[1600px] mx-auto px-6 py-8">
-        {/* Stats */}
-        <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 mb-8">
-          <div className="card-dark p-5">
-            <p className="text-sm text-[#64748B] mb-1">Total Projects</p>
-            <p className="text-3xl font-bold text-white">{projects.length}</p>
-          </div>
-          <div className="card-dark p-5 border-l-4 border-[#B9FF66]">
-            <p className="text-sm text-[#64748B] mb-1">In Progress</p>
-            <p className="text-3xl font-bold text-[#B9FF66]">
-              {projects.filter(p => p.status === 'in_progress').length}
-            </p>
-          </div>
-          <div className="card-dark p-5 border-l-4 border-[#4E956A]">
-            <p className="text-sm text-[#64748B] mb-1">Completed</p>
-            <p className="text-3xl font-bold text-[#4E956A]">
-              {projects.filter(p => p.status === 'completed').length}
-            </p>
-          </div>
-          <div className="card-dark p-5 border-l-4 border-[#DC6F31]">
-            <p className="text-sm text-[#64748B] mb-1">On Hold</p>
-            <p className="text-3xl font-bold text-[#DC6F31]">
-              {projects.filter(p => p.status === 'on_hold').length}
-            </p>
-          </div>
-        </div>
-
-        {/* Filters */}
-        <div className="card-dark p-4 mb-6">
-          <div className="flex flex-col sm:flex-row gap-4">
-            <div className="flex-1 relative">
-              <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-[#64748B]" />
-              <input
-                type="text"
-                placeholder="Search projects..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="input-dark pl-12"
-              />
-            </div>
-            <div className="flex items-center gap-3">
-              <Filter className="w-5 h-5 text-[#64748B]" />
-              <select
-                value={filterStatus}
-                onChange={(e) => setFilterStatus(e.target.value)}
-                className="input-dark w-48"
-              >
-                <option value="">All Status</option>
-                {statusOptions.map(status => (
-                  <option key={status} value={status}>{status.replace('_', ' ')}</option>
-                ))}
-              </select>
-            </div>
-          </div>
-        </div>
-
-        {/* Projects Table */}
-        <div className="card-dark overflow-hidden">
-          <table className="w-full">
-            <thead>
-              <tr className="border-b border-white/5">
-                <th className="px-6 py-4 text-left text-sm font-semibold text-[#94A3B8]">Project</th>
-                <th className="px-6 py-4 text-left text-sm font-semibold text-[#94A3B8]">Client</th>
-                <th className="px-6 py-4 text-left text-sm font-semibold text-[#94A3B8]">Status</th>
-                <th className="px-6 py-4 text-left text-sm font-semibold text-[#94A3B8]">Priority</th>
-                <th className="px-6 py-4 text-left text-sm font-semibold text-[#94A3B8]">Progress</th>
-                <th className="px-6 py-4 text-left text-sm font-semibold text-[#94A3B8]">Timeline</th>
-                <th className="px-6 py-4 text-left text-sm font-semibold text-[#94A3B8]">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-white/5">
-              {loading ? (
-                <tr>
-                  <td colSpan={7} className="px-6 py-12 text-center text-[#64748B]">
-                    <div className="flex items-center justify-center gap-3">
-                      <div className="w-6 h-6 border-2 border-[#B9FF66] border-t-transparent rounded-full animate-spin" />
-                      Loading projects...
-                    </div>
-                  </td>
-                </tr>
-              ) : filteredProjects.length === 0 ? (
-                <tr>
-                  <td colSpan={7} className="px-6 py-12 text-center text-[#64748B]">
-                    No projects found
-                  </td>
-                </tr>
-              ) : (
-                filteredProjects.map((project) => (
-                  <tr key={project._id} className="hover:bg-white/5 transition-colors">
-                    <td className="px-6 py-4">
-                      <div>
-                        <p className="font-medium text-white">{project.name}</p>
-                        <p className="text-sm text-[#64748B]">{project.projectId}</p>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 text-[#94A3B8]">{project.client}</td>
-                    <td className="px-6 py-4">{getStatusBadge(project.status)}</td>
-                    <td className="px-6 py-4">{getPriorityBadge(project.priority)}</td>
-                    <td className="px-6 py-4">
-                      <div className="flex items-center gap-3">
-                        <div className="flex-1 bg-[#252B3D] rounded-full h-2 w-24">
-                          <div 
-                            className="h-2 rounded-full transition-all"
-                            style={{ width: `${project.progress}%`, backgroundColor: getStatusColor(project.status) }}
-                          />
-                        </div>
-                        <span className="text-sm text-[#94A3B8]">{project.progress}%</span>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className="flex items-center gap-2 text-sm text-[#94A3B8]">
-                        <Calendar className="w-4 h-4" />
-                        {new Date(project.startDate).toLocaleDateString()} - {new Date(project.endDate).toLocaleDateString()}
-                      </div>
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className="flex items-center gap-2">
-                        <button
-                          onClick={() => handleEdit(project)}
-                          className="w-8 h-8 rounded-lg bg-[#3D55B6]/20 text-[#8BA4FF] hover:bg-[#3D55B6]/30 flex items-center justify-center transition-colors"
-                        >
-                          <Edit2 className="w-4 h-4" />
-                        </button>
-                        <button
-                          onClick={() => handleDelete(project._id)}
-                          className="w-8 h-8 rounded-lg bg-[#C55050]/20 text-[#FF9B9B] hover:bg-[#C55050]/30 flex items-center justify-center transition-colors"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
-                    </td>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="border-b border-[#ded8c8] text-left text-xs uppercase text-[#6b7280]">
+                  <tr>
+                    <th className="py-3 pr-4">Project</th>
+                    <th className="py-3 pr-4">Client</th>
+                    <th className="py-3 pr-4">Status</th>
+                    <th className="py-3 pr-4">Progress</th>
+                    <th className="py-3 pr-4">Budget</th>
+                    <th className="py-3 text-right">Actions</th>
                   </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-      </main>
-
-      {/* Add/Edit Modal */}
-      {showModal && (
-        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-          <div className="bg-[#252B3D] rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto border border-white/10">
-            <div className="p-6 border-b border-white/10">
-              <h2 className="text-xl font-bold text-white">
-                {editingProject ? 'Edit Project' : 'Add New Project'}
-              </h2>
+                </thead>
+                <tbody className="divide-y divide-[#ded8c8]">
+                  {filtered.map((project) => (
+                    <tr key={project._id}>
+                      <td className="py-3 pr-4">
+                        <p className="font-semibold">{project.name}</p>
+                        <p className="text-xs text-[#6b7280]">{project.projectId}</p>
+                      </td>
+                      <td className="py-3 pr-4">{project.client}</td>
+                      <td className="py-3 pr-4"><Badge tone={project.status === 'completed' ? 'up' : project.status === 'cancelled' ? 'down' : 'neutral'}>{project.status.replaceAll('_', ' ')}</Badge></td>
+                      <td className="py-3 pr-4">
+                        <div className="h-2 w-28 rounded-full bg-[#f7f7f7]">
+                          <div className="h-2 rounded-full bg-[#1f2937]" style={{ width: `${Math.min(project.progress || 0, 100)}%` }} />
+                        </div>
+                        <span className="text-xs text-[#6b7280]">{project.progress}%</span>
+                      </td>
+                      <td className="py-3 pr-4">{money(project.budget)}</td>
+                      <td className="py-3">
+                        <div className="flex justify-end gap-2">
+                          <button onClick={() => startEdit(project)} className="btn-dark rounded-lg px-3"><Edit2 className="h-4 w-4" /></button>
+                          <button onClick={() => deleteProject(project)} className="btn-dark rounded-lg px-3 text-[#b42318]"><Trash2 className="h-4 w-4" /></button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {!loading && filtered.length === 0 && <EmptyState text="No projects found" />}
             </div>
-            <form onSubmit={handleSubmit} className="p-6">
-              <div className="mb-4">
-                <label className="block text-sm font-medium text-[#94A3B8] mb-2">Project Name</label>
-                <input
-                  type="text"
-                  value={formData.name}
-                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  className="input-dark"
-                  required
-                />
+          </Panel>
+        </div>
+
+        <Panel title={showForm ? (editing ? 'Edit Project' : 'New Project') : 'Project Form'}>
+          {showForm ? (
+            <form onSubmit={saveProject} className="space-y-3">
+              <Field value={form.name} onChange={(v) => setForm({ ...form, name: v })} placeholder="Project name" required />
+              <textarea className="input-dark min-h-[88px]" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} placeholder="Description" />
+              <div className="grid grid-cols-2 gap-3">
+                <Field value={form.client} onChange={(v) => setForm({ ...form, client: v })} placeholder="Client" required />
+                <Field value={form.projectManager} onChange={(v) => setForm({ ...form, projectManager: v })} placeholder="Manager" required />
               </div>
-              <div className="mb-4">
-                <label className="block text-sm font-medium text-[#94A3B8] mb-2">Description</label>
-                <textarea
-                  value={formData.description}
-                  onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                  className="input-dark h-24"
-                  required
-                />
+              <div className="grid grid-cols-2 gap-3">
+                <Select value={form.status} onChange={(v) => setForm({ ...form, status: v })} options={['planning', 'in_progress', 'on_hold', 'completed', 'cancelled']} />
+                <Select value={form.priority} onChange={(v) => setForm({ ...form, priority: v })} options={['low', 'medium', 'high', 'urgent']} />
               </div>
-              <div className="grid grid-cols-2 gap-4 mb-4">
-                <div>
-                  <label className="block text-sm font-medium text-[#94A3B8] mb-2">Client</label>
-                  <input
-                    type="text"
-                    value={formData.client}
-                    onChange={(e) => setFormData({ ...formData, client: e.target.value })}
-                    className="input-dark"
-                    required
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-[#94A3B8] mb-2">Project Manager</label>
-                  <input
-                    type="text"
-                    value={formData.projectManager}
-                    onChange={(e) => setFormData({ ...formData, projectManager: e.target.value })}
-                    className="input-dark"
-                    required
-                  />
-                </div>
+              <div className="grid grid-cols-2 gap-3">
+                <Field type="date" value={form.startDate} onChange={(v) => setForm({ ...form, startDate: v })} required />
+                <Field type="date" value={form.endDate} onChange={(v) => setForm({ ...form, endDate: v })} required />
               </div>
-              <div className="grid grid-cols-2 gap-4 mb-4">
-                <div>
-                  <label className="block text-sm font-medium text-[#94A3B8] mb-2">Status</label>
-                  <select
-                    value={formData.status}
-                    onChange={(e) => setFormData({ ...formData, status: e.target.value })}
-                    className="input-dark"
-                  >
-                    {statusOptions.map(status => (
-                      <option key={status} value={status}>{status.replace('_', ' ')}</option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-[#94A3B8] mb-2">Priority</label>
-                  <select
-                    value={formData.priority}
-                    onChange={(e) => setFormData({ ...formData, priority: e.target.value })}
-                    className="input-dark"
-                  >
-                    {priorityOptions.map(priority => (
-                      <option key={priority} value={priority}>{priority}</option>
-                    ))}
-                  </select>
-                </div>
+              <div className="grid grid-cols-2 gap-3">
+                <Field type="number" value={form.budget} onChange={(v) => setForm({ ...form, budget: v })} placeholder="Budget" required />
+                <Field type="number" value={form.progress} onChange={(v) => setForm({ ...form, progress: v })} placeholder="Progress %" />
               </div>
-              <div className="grid grid-cols-2 gap-4 mb-4">
-                <div>
-                  <label className="block text-sm font-medium text-[#94A3B8] mb-2">Start Date</label>
-                  <input
-                    type="date"
-                    value={formData.startDate}
-                    onChange={(e) => setFormData({ ...formData, startDate: e.target.value })}
-                    className="input-dark"
-                    required
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-[#94A3B8] mb-2">End Date</label>
-                  <input
-                    type="date"
-                    value={formData.endDate}
-                    onChange={(e) => setFormData({ ...formData, endDate: e.target.value })}
-                    className="input-dark"
-                    required
-                  />
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-4 mb-4">
-                <div>
-                  <label className="block text-sm font-medium text-[#94A3B8] mb-2">Budget</label>
-                  <input
-                    type="number"
-                    value={formData.budget}
-                    onChange={(e) => setFormData({ ...formData, budget: e.target.value })}
-                    className="input-dark"
-                    required
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-[#94A3B8] mb-2">Progress (%)</label>
-                  <input
-                    type="number"
-                    min="0"
-                    max="100"
-                    value={formData.progress}
-                    onChange={(e) => setFormData({ ...formData, progress: e.target.value })}
-                    className="input-dark"
-                  />
-                </div>
-              </div>
-              <div className="mb-4">
-                <label className="block text-sm font-medium text-[#94A3B8] mb-2">Assigned Employees (comma separated)</label>
-                <input
-                  type="text"
-                  value={formData.assignedEmployees}
-                  onChange={(e) => setFormData({ ...formData, assignedEmployees: e.target.value })}
-                  className="input-dark"
-                  placeholder="e.g. John Doe, Jane Smith"
-                />
-              </div>
-              <div className="mb-6">
-                <label className="block text-sm font-medium text-[#94A3B8] mb-2">Technologies (comma separated)</label>
-                <input
-                  type="text"
-                  value={formData.technologies}
-                  onChange={(e) => setFormData({ ...formData, technologies: e.target.value })}
-                  className="input-dark"
-                  placeholder="e.g. React, Node.js, MongoDB"
-                />
-              </div>
-              <div className="flex justify-end gap-3">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowModal(false);
-                    setEditingProject(null);
-                    resetForm();
-                  }}
-                  className="btn-dark"
-                >
-                  Cancel
-                </button>
-                <button type="submit" className="btn-lime">
-                  {editingProject ? 'Update' : 'Add'} Project
-                </button>
+              <Field value={form.assignedEmployees} onChange={(v) => setForm({ ...form, assignedEmployees: v })} placeholder="Assigned employees, comma separated" />
+              <Field value={form.technologies} onChange={(v) => setForm({ ...form, technologies: v })} placeholder="Tools/technologies, comma separated" />
+              <div className="flex gap-2">
+                <button type="submit" className="btn-lime flex-1 rounded-lg">{editing ? 'Update' : 'Create'}</button>
+                <button type="button" onClick={() => setShowForm(false)} className="btn-dark rounded-lg px-4">Cancel</button>
               </div>
             </form>
-          </div>
-        </div>
-      )}
-    </div>
+          ) : <EmptyState text="Select Add project or edit a row." />}
+        </Panel>
+      </div>
+    </ERPShell>
   );
+}
+
+function Metric({ label, value, tone = 'neutral' }: { label: string; value: string | number; tone?: 'up' | 'down' | 'neutral' }) {
+  return <Panel><p className="text-sm text-[#6b7280]">{label}</p><p className={tone === 'up' ? 'mt-2 text-3xl font-bold text-[#1f8f4d]' : tone === 'down' ? 'mt-2 text-3xl font-bold text-[#b42318]' : 'mt-2 text-3xl font-bold'}>{value}</p></Panel>;
+}
+
+function Field({ value, onChange, type = 'text', placeholder, required }: { value: string; onChange: (value: string) => void; type?: string; placeholder?: string; required?: boolean }) {
+  return <input className="input-dark" value={value} onChange={(event) => onChange(event.target.value)} type={type} placeholder={placeholder} required={required} />;
+}
+
+function Select({ value, onChange, options }: { value: string; onChange: (value: string) => void; options: string[] }) {
+  return <select className="input-dark" value={value} onChange={(event) => onChange(event.target.value)}>{options.map((option) => <option key={option} value={option}>{option.replaceAll('_', ' ')}</option>)}</select>;
 }

@@ -223,8 +223,8 @@ const BillSchema: Schema<IBill> = new Schema(
 // Generate bill ID before saving
 BillSchema.pre('save', async function(next) {
   if (this.isNew && !this.billId) {
-    const Bill = this.constructor as typeof Bill;
-    const count = await Bill.countDocuments();
+    const BillModel = this.constructor as Model<IBill>;
+    const count = await BillModel.countDocuments();
     this.billId = `BILL-${String(count + 1).padStart(6, '0')}`;
   }
   next();

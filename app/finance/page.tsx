@@ -1,24 +1,10 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
-import Link from 'next/link';
-import { 
-  DollarSign, 
-  Plus, 
-  Search, 
-  Filter, 
-  Edit2, 
-  Trash2, 
-  ArrowLeft,
-  TrendingUp,
-  TrendingDown,
-  Wallet,
-  PieChart,
-  Calendar,
-  CreditCard
-} from 'lucide-react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Edit2, Plus, Search, Trash2, TrendingDown, TrendingUp } from 'lucide-react';
+import { Badge, EmptyState, ERPShell, Panel, money } from '@/app/components/erp-shell';
 
-interface Transaction {
+type Transaction = {
   _id: string;
   transactionId: string;
   type: 'income' | 'expense';
@@ -28,9 +14,9 @@ interface Transaction {
   date: string;
   status: string;
   paymentMethod: string;
-}
+};
 
-interface Budget {
+type Budget = {
   _id: string;
   budgetId: string;
   department: string;
@@ -38,723 +24,243 @@ interface Budget {
   allocatedAmount: number;
   spentAmount: number;
   remainingAmount: number;
-}
+};
 
-interface DashboardData {
-  summary: {
-    totalIncome: number;
-    totalExpenses: number;
-    netProfit: number;
-  };
-  recentTransactions: Transaction[];
-  budgetSummary: {
-    totalAllocated: number;
-    totalSpent: number;
-    totalRemaining: number;
-  };
-}
+const transactionEmpty = {
+  type: 'income' as 'income' | 'expense',
+  category: 'Revenue',
+  amount: '',
+  description: '',
+  date: new Date().toISOString().slice(0, 10),
+  status: 'completed',
+  paymentMethod: 'bank_transfer',
+};
 
-export default function FinanceManagement() {
-  const [activeTab, setActiveTab] = useState<'transactions' | 'budgets'>('transactions');
+const budgetEmpty = {
+  department: 'Engineering',
+  fiscalYear: String(new Date().getFullYear()),
+  allocatedAmount: '',
+};
+
+export default function FinancePage() {
+  const [tab, setTab] = useState<'transactions' | 'budgets'>('transactions');
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [budgets, setBudgets] = useState<Budget[]>([]);
-  const [dashboardData, setDashboardData] = useState<DashboardData | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [filterType, setFilterType] = useState('');
-  const [showModal, setShowModal] = useState(false);
-  const [showBudgetModal, setShowBudgetModal] = useState(false);
+  const [query, setQuery] = useState('');
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
   const [editingBudget, setEditingBudget] = useState<Budget | null>(null);
-  
-  const [transactionForm, setTransactionForm] = useState({
-    type: 'income' as 'income' | 'expense',
-    category: '',
-    amount: '',
-    description: '',
-    date: '',
-    status: 'pending',
-    paymentMethod: 'bank_transfer',
-  });
+  const [transactionForm, setTransactionForm] = useState(transactionEmpty);
+  const [budgetForm, setBudgetForm] = useState(budgetEmpty);
+  const [showTransactionForm, setShowTransactionForm] = useState(false);
+  const [showBudgetForm, setShowBudgetForm] = useState(false);
 
-  const [budgetForm, setBudgetForm] = useState({
-    department: '',
-    fiscalYear: new Date().getFullYear(),
-    allocatedAmount: '',
-    categories: [{ name: '', allocated: '' }],
-  });
-
-  const categories = [
-    'Salary', 'Software', 'Hardware', 'Office', 'Marketing', 
-    'Travel', 'Training', 'Consulting', 'Revenue', 'Other'
-  ];
-  const paymentMethods = ['cash', 'bank_transfer', 'credit_card', 'check', 'digital_wallet'];
-  const statusOptions = ['pending', 'completed', 'cancelled'];
-  const departments = ['Engineering', 'Sales', 'Marketing', 'HR', 'Finance', 'Operations', 'Support'];
-
-  const fetchDashboardData = useCallback(async () => {
-    try {
-      const response = await fetch('/api/finance/dashboard');
-      const data = await response.json();
-      if (data.success) {
-        setDashboardData(data.data);
-      }
-    } catch (error) {
-      console.error('Error fetching dashboard:', error);
-    }
-  }, []);
-
-  const fetchTransactions = useCallback(async () => {
-    try {
-      const queryParams = filterType ? `?type=${filterType}` : '';
-      const response = await fetch(`/api/finance/transactions${queryParams}`);
-      const data = await response.json();
-      if (data.success) {
-        setTransactions(data.data);
-      }
-    } catch (error) {
-      console.error('Error fetching transactions:', error);
-    } finally {
-      setLoading(false);
-    }
-  }, [filterType]);
-
-  const fetchBudgets = useCallback(async () => {
-    try {
-      const response = await fetch('/api/finance/budgets');
-      const data = await response.json();
-      if (data.success) {
-        setBudgets(data.data);
-      }
-    } catch (error) {
-      console.error('Error fetching budgets:', error);
-    }
+  const fetchFinance = useCallback(async () => {
+    const [transactionResponse, budgetResponse] = await Promise.all([
+      fetch('/api/finance/transactions'),
+      fetch('/api/finance/budgets'),
+    ]);
+    const transactionPayload = await transactionResponse.json();
+    const budgetPayload = await budgetResponse.json();
+    if (transactionPayload.success) setTransactions(transactionPayload.data);
+    if (budgetPayload.success) setBudgets(budgetPayload.data);
   }, []);
 
   useEffect(() => {
-    fetchDashboardData();
-    fetchBudgets();
-  }, [fetchDashboardData, fetchBudgets]);
+    fetchFinance();
+  }, [fetchFinance]);
 
-  useEffect(() => {
-    fetchTransactions();
-  }, [fetchTransactions]);
+  const summary = useMemo(() => {
+    const completed = transactions.filter((item) => item.status === 'completed');
+    const income = completed.filter((item) => item.type === 'income').reduce((sum, item) => sum + Number(item.amount || 0), 0);
+    const expenses = completed.filter((item) => item.type === 'expense').reduce((sum, item) => sum + Number(item.amount || 0), 0);
+    return { income, expenses, profit: income - expenses };
+  }, [transactions]);
 
-  const handleTransactionSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    try {
-      const url = editingTransaction 
-        ? `/api/finance/transactions/${editingTransaction._id}` 
-        : '/api/finance/transactions';
-      const method = editingTransaction ? 'PUT' : 'POST';
-      
-      const response = await fetch(url, {
-        method,
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ...transactionForm,
-          amount: Number(transactionForm.amount),
-        }),
-      });
+  const filteredTransactions = transactions.filter((item) => `${item.description} ${item.category} ${item.transactionId}`.toLowerCase().includes(query.toLowerCase()));
 
-      const data = await response.json();
-      if (data.success) {
-        setShowModal(false);
-        setEditingTransaction(null);
-        resetTransactionForm();
-        fetchTransactions();
-        fetchDashboardData();
-      }
-    } catch (error) {
-      console.error('Error saving transaction:', error);
-    }
-  };
-
-  const handleBudgetSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    try {
-      const url = editingBudget 
-        ? `/api/finance/budgets/${editingBudget._id}` 
-        : '/api/finance/budgets';
-      const method = editingBudget ? 'PUT' : 'POST';
-      
-      const response = await fetch(url, {
-        method,
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ...budgetForm,
-          allocatedAmount: Number(budgetForm.allocatedAmount),
-          categories: budgetForm.categories.map(cat => ({
-            name: cat.name,
-            allocated: Number(cat.allocated),
-            spent: 0,
-          })),
-        }),
-      });
-
-      const data = await response.json();
-      if (data.success) {
-        setShowBudgetModal(false);
-        setEditingBudget(null);
-        resetBudgetForm();
-        fetchBudgets();
-      }
-    } catch (error) {
-      console.error('Error saving budget:', error);
-    }
-  };
-
-  const handleDeleteTransaction = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this transaction?')) return;
-    
-    try {
-      const response = await fetch(`/api/finance/transactions/${id}`, {
-        method: 'DELETE',
-      });
-      const data = await response.json();
-      if (data.success) {
-        fetchTransactions();
-        fetchDashboardData();
-      }
-    } catch (error) {
-      console.error('Error deleting transaction:', error);
-    }
-  };
-
-  const handleDeleteBudget = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this budget?')) return;
-    
-    try {
-      const response = await fetch(`/api/finance/budgets/${id}`, {
-        method: 'DELETE',
-      });
-      const data = await response.json();
-      if (data.success) {
-        fetchBudgets();
-      }
-    } catch (error) {
-      console.error('Error deleting budget:', error);
-    }
-  };
-
-  const handleEditTransaction = (transaction: Transaction) => {
-    setEditingTransaction(transaction);
-    setTransactionForm({
+  const startTransaction = (transaction?: Transaction) => {
+    setEditingTransaction(transaction ?? null);
+    setTransactionForm(transaction ? {
       type: transaction.type,
       category: transaction.category,
-      amount: transaction.amount.toString(),
+      amount: String(transaction.amount),
       description: transaction.description,
-      date: transaction.date.split('T')[0],
+      date: transaction.date?.slice(0, 10) || transactionEmpty.date,
       status: transaction.status,
       paymentMethod: transaction.paymentMethod,
-    });
-    setShowModal(true);
+    } : transactionEmpty);
+    setShowTransactionForm(true);
+    setTab('transactions');
   };
 
-  const handleEditBudget = (budget: Budget) => {
-    setEditingBudget(budget);
-    setBudgetForm({
+  const startBudget = (budget?: Budget) => {
+    setEditingBudget(budget ?? null);
+    setBudgetForm(budget ? {
       department: budget.department,
-      fiscalYear: budget.fiscalYear,
-      allocatedAmount: budget.allocatedAmount.toString(),
-      categories: [{ name: '', allocated: '' }],
+      fiscalYear: String(budget.fiscalYear),
+      allocatedAmount: String(budget.allocatedAmount),
+    } : budgetEmpty);
+    setShowBudgetForm(true);
+    setTab('budgets');
+  };
+
+  const saveTransaction = async (event: React.FormEvent) => {
+    event.preventDefault();
+    const response = await fetch(editingTransaction ? `/api/finance/transactions/${editingTransaction._id}` : '/api/finance/transactions', {
+      method: editingTransaction ? 'PUT' : 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...transactionForm, amount: Number(transactionForm.amount || 0) }),
     });
-    setShowBudgetModal(true);
+    const payload = await response.json();
+    if (payload.success) {
+      setShowTransactionForm(false);
+      fetchFinance();
+    }
   };
 
-  const resetTransactionForm = () => {
-    setTransactionForm({
-      type: 'income',
-      category: '',
-      amount: '',
-      description: '',
-      date: '',
-      status: 'pending',
-      paymentMethod: 'bank_transfer',
+  const saveBudget = async (event: React.FormEvent) => {
+    event.preventDefault();
+    const response = await fetch(editingBudget ? `/api/finance/budgets/${editingBudget._id}` : '/api/finance/budgets', {
+      method: editingBudget ? 'PUT' : 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        department: budgetForm.department,
+        fiscalYear: Number(budgetForm.fiscalYear),
+        allocatedAmount: Number(budgetForm.allocatedAmount || 0),
+        categories: [],
+      }),
     });
+    const payload = await response.json();
+    if (payload.success) {
+      setShowBudgetForm(false);
+      fetchFinance();
+    }
   };
 
-  const resetBudgetForm = () => {
-    setBudgetForm({
-      department: '',
-      fiscalYear: new Date().getFullYear(),
-      allocatedAmount: '',
-      categories: [{ name: '', allocated: '' }],
-    });
-  };
-
-  const openAddTransactionModal = () => {
-    setEditingTransaction(null);
-    resetTransactionForm();
-    setShowModal(true);
-  };
-
-  const openAddBudgetModal = () => {
-    setEditingBudget(null);
-    resetBudgetForm();
-    setShowBudgetModal(true);
-  };
-
-  const filteredTransactions = transactions.filter(transaction => 
-    transaction.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    transaction.category.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    transaction.transactionId.toLowerCase().includes(searchTerm.toLowerCase())
-  );
-
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD',
-    }).format(amount);
-  };
-
-  const getStatusBadge = (status: string) => {
-    const classes = {
-      pending: 'badge-yellow',
-      completed: 'badge-green',
-      cancelled: 'badge-red',
-    };
-    return <span className={`badge ${classes[status as keyof typeof classes]}`}>{status}</span>;
+  const deleteRecord = async (path: string) => {
+    if (!confirm('Delete this record?')) return;
+    await fetch(path, { method: 'DELETE' });
+    fetchFinance();
   };
 
   return (
-    <div className="min-h-screen bg-[#191E2C]">
-      {/* Header */}
-      <nav className="sticky top-0 z-50 bg-[#191E2C]/95 backdrop-blur-sm border-b border-white/5">
-        <div className="max-w-[1600px] mx-auto px-6 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <Link href="/" className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-[#B9FF66] flex items-center justify-center">
-                  <DollarSign className="h-5 w-5 text-[#191E2C]" />
-                </div>
-              </Link>
-            </div>
-            <button
-              onClick={() => { setEditingTransaction(null); setShowModal(true); }}
-              className="btn-lime"
-            >
-              <Plus className="h-4 w-4" />
-              <span className="hidden sm:inline">Add Transaction</span>
-            </button>
-          </div>
+    <ERPShell
+      title="Finance"
+      description="Track company income, expenses, budgets, and cash position."
+      action={
+        <div className="flex gap-2">
+          <button onClick={() => startTransaction()} className="btn-lime rounded-lg px-4"><Plus className="h-4 w-4" />Transaction</button>
+          <button onClick={() => startBudget()} className="btn-dark rounded-lg px-4"><Plus className="h-4 w-4" />Budget</button>
         </div>
-      </nav>
-
-      {/* Main Content */}
-      <main className="max-w-[1600px] mx-auto px-6 py-8">
-        {/* Dashboard Cards */}
-        {dashboardData && (
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-            <div className="card-dark p-5 flex items-center gap-4">
-              <div className="w-12 h-12 rounded-2xl bg-[#4E956A]/20 flex items-center justify-center">
-                <TrendingUp className="h-6 w-6 text-[#4E956A]" />
-              </div>
-              <div>
-                <p className="text-sm text-[#64748B]">Total Income</p>
-                <p className="text-2xl font-bold text-[#4E956A]">
-                  {formatCurrency(dashboardData.summary.totalIncome)}
-                </p>
-              </div>
-            </div>
-            <div className="card-dark p-5 flex items-center gap-4">
-              <div className="w-12 h-12 rounded-2xl bg-[#C55050]/20 flex items-center justify-center">
-                <TrendingDown className="h-6 w-6 text-[#C55050]" />
-              </div>
-              <div>
-                <p className="text-sm text-[#64748B]">Total Expenses</p>
-                <p className="text-2xl font-bold text-[#C55050]">
-                  {formatCurrency(dashboardData.summary.totalExpenses)}
-                </p>
-              </div>
-            </div>
-            <div className="card-dark p-5 flex items-center gap-4">
-              <div className="w-12 h-12 rounded-2xl bg-[#B9FF66]/20 flex items-center justify-center">
-                <Wallet className="h-6 w-6 text-[#B9FF66]" />
-              </div>
-              <div>
-                <p className="text-sm text-[#64748B]">Net Profit</p>
-                <p className={`text-2xl font-bold ${dashboardData.summary.netProfit >= 0 ? 'text-[#B9FF66]' : 'text-[#C55050]'}`}>
-                  {formatCurrency(dashboardData.summary.netProfit)}
-                </p>
-              </div>
-            </div>
-            <div className="card-dark p-5 flex items-center gap-4">
-              <div className="w-12 h-12 rounded-2xl bg-[#BC5FCF]/20 flex items-center justify-center">
-                <PieChart className="h-6 w-6 text-[#BC5FCF]" />
-              </div>
-              <div>
-                <p className="text-sm text-[#64748B]">Budget Remaining</p>
-                <p className="text-2xl font-bold text-[#BC5FCF]">
-                  {formatCurrency(dashboardData.budgetSummary.totalRemaining)}
-                </p>
-              </div>
-            </div>
+      }
+    >
+      <div className="grid grid-cols-1 gap-5 xl:grid-cols-[1fr_420px]">
+        <div className="space-y-5">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+            <Metric label="Income" value={money(summary.income)} tone="up" />
+            <Metric label="Expenses" value={money(summary.expenses)} tone="down" />
+            <Metric label="Net profit" value={money(summary.profit)} tone={summary.profit >= 0 ? 'up' : 'down'} />
           </div>
-        )}
-
-        {/* Tabs */}
-        <div className="flex gap-4 mb-6 border-b border-white/10">
-          <button
-            onClick={() => setActiveTab('transactions')}
-            className={`pb-3 px-4 font-medium transition-colors ${
-              activeTab === 'transactions' 
-                ? 'text-[#B9FF66] border-b-2 border-[#B9FF66]' 
-                : 'text-[#64748B] hover:text-white'
-            }`}
-          >
-            Transactions
-          </button>
-          <button
-            onClick={() => setActiveTab('budgets')}
-            className={`pb-3 px-4 font-medium transition-colors ${
-              activeTab === 'budgets' 
-                ? 'text-[#B9FF66] border-b-2 border-[#B9FF66]' 
-                : 'text-[#64748B] hover:text-white'
-            }`}
-          >
-            Budgets
-          </button>
-        </div>
-
-        {/* Transactions Tab */}
-        {activeTab === 'transactions' && (
-          <>
-            <div className="card-dark p-4 mb-6">
-              <div className="flex flex-col sm:flex-row gap-4">
-                <div className="flex-1 relative">
-                  <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-[#64748B]" />
-                  <input
-                    type="text"
-                    placeholder="Search transactions..."
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    className="input-dark pl-12"
-                  />
-                </div>
-                <div className="flex items-center gap-2">
-                  <Filter className="w-5 h-5 text-[#64748B]" />
-                  <select
-                    value={filterType}
-                    onChange={(e) => setFilterType(e.target.value)}
-                    className="input-dark w-32"
-                  >
-                    <option value="">All</option>
-                    <option value="income">Income</option>
-                    <option value="expense">Expense</option>
-                  </select>
-                </div>
-              </div>
+          <Panel>
+            <div className="mb-4 flex gap-2">
+              <button className={tab === 'transactions' ? 'btn-lime rounded-lg px-4' : 'btn-dark rounded-lg px-4'} onClick={() => setTab('transactions')}>Transactions</button>
+              <button className={tab === 'budgets' ? 'btn-lime rounded-lg px-4' : 'btn-dark rounded-lg px-4'} onClick={() => setTab('budgets')}>Budgets</button>
             </div>
-
-            <div className="space-y-3">
-              {loading ? (
-                <div className="card-dark p-8 text-center text-[#64748B]">
-                  Loading...
+            {tab === 'transactions' ? (
+              <>
+                <div className="relative mb-4">
+                  <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#6b7280]" />
+                  <input className="input-dark pl-10" placeholder="Search transactions" value={query} onChange={(e) => setQuery(e.target.value)} />
                 </div>
-              ) : filteredTransactions.length === 0 ? (
-                <div className="card-dark p-8 text-center text-[#64748B]">
-                  No transactions found
-                </div>
-              ) : (
-                filteredTransactions.map((transaction) => (
-                  <div key={transaction._id} className="card-dark p-4 flex items-center justify-between">
-                    <div className="flex items-center gap-4">
-                      <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${
-                        transaction.type === 'income' ? 'bg-[#4E956A]/20' : 'bg-[#C55050]/20'
-                      }`}>
-                        {transaction.type === 'income' ? (
-                          <TrendingUp className="w-5 h-5 text-[#4E956A]" />
-                        ) : (
-                          <TrendingDown className="w-5 h-5 text-[#C55050]" />
-                        )}
+                <div className="space-y-3">
+                  {filteredTransactions.map((transaction) => (
+                    <div key={transaction._id} className="flex items-center justify-between gap-4 rounded-lg border border-[#ded8c8] p-3">
+                      <div className="flex items-center gap-3">
+                        {transaction.type === 'income' ? <TrendingUp className="h-5 w-5 text-[#1f8f4d]" /> : <TrendingDown className="h-5 w-5 text-[#b42318]" />}
+                        <div>
+                          <p className="font-semibold">{transaction.description}</p>
+                          <p className="text-xs text-[#6b7280]">{transaction.category} / {new Date(transaction.date).toLocaleDateString()}</p>
+                        </div>
                       </div>
+                      <div className="flex items-center gap-2">
+                        <span className={transaction.type === 'income' ? 'font-bold text-[#1f8f4d]' : 'font-bold text-[#b42318]'}>{transaction.type === 'income' ? '+' : '-'}{money(transaction.amount)}</span>
+                        <button onClick={() => startTransaction(transaction)} className="btn-dark rounded-lg px-3"><Edit2 className="h-4 w-4" /></button>
+                        <button onClick={() => deleteRecord(`/api/finance/transactions/${transaction._id}`)} className="btn-dark rounded-lg px-3 text-[#b42318]"><Trash2 className="h-4 w-4" /></button>
+                      </div>
+                    </div>
+                  ))}
+                  {filteredTransactions.length === 0 && <EmptyState text="No transactions found" />}
+                </div>
+              </>
+            ) : (
+              <div className="grid gap-3 md:grid-cols-2">
+                {budgets.map((budget) => (
+                  <div key={budget._id} className="rounded-lg border border-[#ded8c8] p-4">
+                    <div className="flex items-start justify-between gap-3">
                       <div>
-                        <p className="font-medium text-white">{transaction.description}</p>
-                        <p className="text-sm text-[#64748B]">{transaction.category} • {transaction.transactionId}</p>
+                        <p className="font-semibold">{budget.department}</p>
+                        <p className="text-xs text-[#6b7280]">FY {budget.fiscalYear}</p>
                       </div>
+                      <Badge tone={budget.remainingAmount >= 0 ? 'up' : 'down'}>{money(budget.remainingAmount)} left</Badge>
                     </div>
-                    <div className="flex items-center gap-6">
-                      <div className="text-right">
-                        <p className={`font-bold ${transaction.type === 'income' ? 'text-[#4E956A]' : 'text-[#C55050]'}`}>
-                          {transaction.type === 'income' ? '+' : '-'}{formatCurrency(transaction.amount)}
-                        </p>
-                        <p className="text-xs text-[#64748B]">{new Date(transaction.date).toLocaleDateString()}</p>
-                      </div>
-                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                        transaction.status === 'completed' ? 'bg-[#4E956A]/20 text-[#4E956A]' :
-                        transaction.status === 'pending' ? 'bg-[#DC6F31]/20 text-[#DC6F31]' :
-                        'bg-[#C55050]/20 text-[#C55050]'
-                      }`}>
-                        {transaction.status}
-                      </span>
-                      <div className="flex items-center gap-1">
-                        <button
-                          onClick={() => handleEditTransaction(transaction)}
-                          className="w-8 h-8 rounded-lg bg-[#3D55B6]/20 text-[#8BA4FF] flex items-center justify-center hover:bg-[#3D55B6]/30"
-                        >
-                          <Edit2 className="w-4 h-4" />
-                        </button>
-                        <button
-                          onClick={() => handleDeleteTransaction(transaction._id)}
-                          className="w-8 h-8 rounded-lg bg-[#C55050]/20 text-[#FF9B9B] flex items-center justify-center hover:bg-[#C55050]/30"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
+                    <div className="mt-4 text-sm">
+                      <p>Allocated: <strong>{money(budget.allocatedAmount)}</strong></p>
+                      <p>Spent: <strong className="text-[#b42318]">{money(budget.spentAmount)}</strong></p>
+                    </div>
+                    <div className="mt-4 flex gap-2">
+                      <button onClick={() => startBudget(budget)} className="btn-dark rounded-lg px-3"><Edit2 className="h-4 w-4" /></button>
+                      <button onClick={() => deleteRecord(`/api/finance/budgets/${budget._id}`)} className="btn-dark rounded-lg px-3 text-[#b42318]"><Trash2 className="h-4 w-4" /></button>
                     </div>
                   </div>
-                ))
-              )}
-            </div>
-          </>
-        )}
-
-        {/* Budgets Tab */}
-        {activeTab === 'budgets' && (
-          <>
-            <div className="card-dark p-4 mb-6 flex justify-end">
-              <button
-                onClick={openAddBudgetModal}
-                className="btn-lime flex items-center gap-2"
-              >
-                <Plus className="w-4 h-4" />
-                Add Budget
-              </button>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {budgets.map((budget) => (
-                <div key={budget._id} className="card-dark p-5">
-                  <div className="flex items-center justify-between mb-4">
-                    <h3 className="font-semibold text-white">{budget.department}</h3>
-                    <div className="flex items-center gap-1">
-                      <button
-                        onClick={() => handleEditBudget(budget)}
-                        className="w-8 h-8 rounded-lg bg-[#3D55B6]/20 text-[#8BA4FF] flex items-center justify-center hover:bg-[#3D55B6]/30"
-                      >
-                        <Edit2 className="w-4 h-4" />
-                      </button>
-                      <button
-                        onClick={() => handleDeleteBudget(budget._id)}
-                        className="w-8 h-8 rounded-lg bg-[#C55050]/20 text-[#FF9B9B] flex items-center justify-center hover:bg-[#C55050]/30"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </div>
-                  </div>
-                  <p className="text-sm text-[#64748B] mb-4">FY {budget.fiscalYear}</p>
-                  <div className="space-y-3">
-                    <div className="flex justify-between">
-                      <span className="text-sm text-[#64748B]">Allocated:</span>
-                      <span className="font-medium text-white">{formatCurrency(budget.allocatedAmount)}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-sm text-[#64748B]">Spent:</span>
-                      <span className="font-medium text-[#C55050]">{formatCurrency(budget.spentAmount)}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-sm text-[#64748B]">Remaining:</span>
-                      <span className="font-medium text-[#4E956A]">{formatCurrency(budget.remainingAmount)}</span>
-                    </div>
-                    <div className="pt-2">
-                      <div className="bg-[#252B3D] rounded-full h-2">
-                        <div 
-                          className={`h-2 rounded-full transition-all ${
-                            (budget.spentAmount / budget.allocatedAmount) > 0.9 ? 'bg-[#C55050]' : 'bg-[#B9FF66]'
-                          }`}
-                          style={{ width: `${Math.min((budget.spentAmount / budget.allocatedAmount) * 100, 100)}%` }}
-                        />
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </>
-        )}
-      </main>
-
-      {/* Transaction Modal */}
-      {showModal && (
-        <div className="fixed inset-0 bg-black/70 flex items-center justify-center p-4 z-50">
-          <div className="bg-[#252B3D] rounded-2xl max-w-lg w-full border border-white/10">
-            <div className="p-6 border-b border-white/10">
-              <h2 className="text-xl font-bold text-white">
-                {editingTransaction ? 'Edit Transaction' : 'Add Transaction'}
-              </h2>
-            </div>
-            <form onSubmit={handleTransactionSubmit} className="p-6">
-              <div className="grid grid-cols-2 gap-4 mb-4">
-                <div>
-                  <label className="block text-sm text-[#94A3B8] mb-1">Type</label>
-                  <select
-                    value={transactionForm.type}
-                    onChange={(e) => setTransactionForm({ ...transactionForm, type: e.target.value as 'income' | 'expense' })}
-                    className="input-dark w-full"
-                  >
-                    <option value="income">Income</option>
-                    <option value="expense">Expense</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm text-[#94A3B8] mb-1">Amount</label>
-                  <input
-                    type="number"
-                    value={transactionForm.amount}
-                    onChange={(e) => setTransactionForm({ ...transactionForm, amount: e.target.value })}
-                    className="input-dark w-full"
-                    required
-                  />
-                </div>
+                ))}
+                {budgets.length === 0 && <EmptyState text="No budgets found" />}
               </div>
-              <div className="mb-4">
-                <label className="block text-sm text-[#94A3B8] mb-1">Category</label>
-                <select
-                  value={transactionForm.category}
-                  onChange={(e) => setTransactionForm({ ...transactionForm, category: e.target.value })}
-                  className="input-dark w-full"
-                  required
-                >
-                  <option value="">Select Category</option>
-                  {categories.map(cat => (
-                    <option key={cat} value={cat}>{cat}</option>
-                  ))}
-                </select>
-              </div>
-              <div className="mb-4">
-                <label className="block text-sm text-[#94A3B8] mb-1">Description</label>
-                <input
-                  type="text"
-                  value={transactionForm.description}
-                  onChange={(e) => setTransactionForm({ ...transactionForm, description: e.target.value })}
-                  className="input-dark w-full"
-                  required
-                />
-              </div>
-              <div className="grid grid-cols-2 gap-4 mb-4">
-                <div>
-                  <label className="block text-sm text-[#94A3B8] mb-1">Date</label>
-                  <input
-                    type="date"
-                    value={transactionForm.date}
-                    onChange={(e) => setTransactionForm({ ...transactionForm, date: e.target.value })}
-                    className="input-dark w-full"
-                    required
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm text-[#94A3B8] mb-1">Payment Method</label>
-                  <select
-                    value={transactionForm.paymentMethod}
-                    onChange={(e) => setTransactionForm({ ...transactionForm, paymentMethod: e.target.value })}
-                    className="input-dark w-full"
-                  >
-                    {paymentMethods.map(method => (
-                      <option key={method} value={method}>{method.replace('_', ' ')}</option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-              <div className="mb-6">
-                <label className="block text-sm text-[#94A3B8] mb-1">Status</label>
-                <select
-                  value={transactionForm.status}
-                  onChange={(e) => setTransactionForm({ ...transactionForm, status: e.target.value })}
-                  className="input-dark w-full"
-                >
-                  {statusOptions.map(status => (
-                    <option key={status} value={status}>{status}</option>
-                  ))}
-                </select>
-              </div>
-              <div className="flex justify-end gap-3">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowModal(false);
-                    setEditingTransaction(null);
-                    resetTransactionForm();
-                  }}
-                  className="btn-dark"
-                >
-                  Cancel
-                </button>
-                <button type="submit" className="btn-lime">
-                  {editingTransaction ? 'Update' : 'Add'} Transaction
-                </button>
-              </div>
-            </form>
-          </div>
+            )}
+          </Panel>
         </div>
-      )}
 
-      {/* Budget Modal */}
-      {showBudgetModal && (
-        <div className="fixed inset-0 bg-black/70 flex items-center justify-center p-4 z-50">
-          <div className="bg-[#252B3D] rounded-2xl max-w-lg w-full border border-white/10">
-            <div className="p-6 border-b border-white/10">
-              <h2 className="text-xl font-bold text-white">
-                {editingBudget ? 'Edit Budget' : 'Add Budget'}
-              </h2>
-            </div>
-            <form onSubmit={handleBudgetSubmit} className="p-6">
-              <div className="grid grid-cols-2 gap-4 mb-4">
-                <div>
-                  <label className="block text-sm text-[#94A3B8] mb-1">Department</label>
-                  <select
-                    value={budgetForm.department}
-                    onChange={(e) => setBudgetForm({ ...budgetForm, department: e.target.value })}
-                    className="input-dark w-full"
-                    required
-                  >
-                    <option value="">Select Department</option>
-                    {departments.map(dept => (
-                      <option key={dept} value={dept}>{dept}</option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm text-[#94A3B8] mb-1">Fiscal Year</label>
-                  <input
-                    type="number"
-                    value={budgetForm.fiscalYear}
-                    onChange={(e) => setBudgetForm({ ...budgetForm, fiscalYear: parseInt(e.target.value) })}
-                    className="input-dark w-full"
-                    required
-                  />
-                </div>
+        <Panel title={tab === 'transactions' ? 'Transaction Form' : 'Budget Form'}>
+          {tab === 'transactions' && showTransactionForm ? (
+            <form onSubmit={saveTransaction} className="space-y-3">
+              <div className="grid grid-cols-2 gap-3">
+                <Select value={transactionForm.type} onChange={(v) => setTransactionForm({ ...transactionForm, type: v as 'income' | 'expense' })} options={['income', 'expense']} />
+                <Select value={transactionForm.status} onChange={(v) => setTransactionForm({ ...transactionForm, status: v })} options={['pending', 'completed', 'cancelled']} />
               </div>
-              <div className="mb-6">
-                <label className="block text-sm text-[#94A3B8] mb-1">Allocated Amount</label>
-                <input
-                  type="number"
-                  value={budgetForm.allocatedAmount}
-                  onChange={(e) => setBudgetForm({ ...budgetForm, allocatedAmount: e.target.value })}
-                  className="input-dark w-full"
-                  required
-                />
+              <Field value={transactionForm.description} onChange={(v) => setTransactionForm({ ...transactionForm, description: v })} placeholder="Description" required />
+              <div className="grid grid-cols-2 gap-3">
+                <Field value={transactionForm.category} onChange={(v) => setTransactionForm({ ...transactionForm, category: v })} placeholder="Category" required />
+                <Field type="number" value={transactionForm.amount} onChange={(v) => setTransactionForm({ ...transactionForm, amount: v })} placeholder="Amount" required />
               </div>
-              <div className="flex justify-end gap-3">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowBudgetModal(false);
-                    setEditingBudget(null);
-                    resetBudgetForm();
-                  }}
-                  className="btn-dark"
-                >
-                  Cancel
-                </button>
-                <button type="submit" className="btn-lime">
-                  {editingBudget ? 'Update' : 'Add'} Budget
-                </button>
+              <div className="grid grid-cols-2 gap-3">
+                <Field type="date" value={transactionForm.date} onChange={(v) => setTransactionForm({ ...transactionForm, date: v })} />
+                <Select value={transactionForm.paymentMethod} onChange={(v) => setTransactionForm({ ...transactionForm, paymentMethod: v })} options={['cash', 'bank_transfer', 'credit_card', 'check', 'digital_wallet']} />
               </div>
+              <button type="submit" className="btn-lime w-full rounded-lg">{editingTransaction ? 'Update' : 'Create'} transaction</button>
             </form>
-          </div>
-        </div>
-      )}
-    </div>
+          ) : tab === 'budgets' && showBudgetForm ? (
+            <form onSubmit={saveBudget} className="space-y-3">
+              <Select value={budgetForm.department} onChange={(v) => setBudgetForm({ ...budgetForm, department: v })} options={['Engineering', 'Sales', 'Marketing', 'HR', 'Finance', 'Operations', 'Support']} />
+              <div className="grid grid-cols-2 gap-3">
+                <Field type="number" value={budgetForm.fiscalYear} onChange={(v) => setBudgetForm({ ...budgetForm, fiscalYear: v })} placeholder="Fiscal year" required />
+                <Field type="number" value={budgetForm.allocatedAmount} onChange={(v) => setBudgetForm({ ...budgetForm, allocatedAmount: v })} placeholder="Allocated" required />
+              </div>
+              <button type="submit" className="btn-lime w-full rounded-lg">{editingBudget ? 'Update' : 'Create'} budget</button>
+            </form>
+          ) : <EmptyState text="Choose Transaction or Budget to add/edit records." />}
+        </Panel>
+      </div>
+    </ERPShell>
   );
+}
+
+function Metric({ label, value, tone }: { label: string; value: string; tone: 'up' | 'down' }) {
+  return <Panel><p className="text-sm text-[#6b7280]">{label}</p><p className={tone === 'up' ? 'mt-2 text-3xl font-bold text-[#1f8f4d]' : 'mt-2 text-3xl font-bold text-[#b42318]'}>{value}</p></Panel>;
+}
+
+function Field({ value, onChange, type = 'text', placeholder, required }: { value: string; onChange: (value: string) => void; type?: string; placeholder?: string; required?: boolean }) {
+  return <input className="input-dark" value={value} onChange={(event) => onChange(event.target.value)} type={type} placeholder={placeholder} required={required} />;
+}
+
+function Select({ value, onChange, options }: { value: string; onChange: (value: string) => void; options: string[] }) {
+  return <select className="input-dark" value={value} onChange={(event) => onChange(event.target.value)}>{options.map((option) => <option key={option} value={option}>{option.replaceAll('_', ' ')}</option>)}</select>;
 }

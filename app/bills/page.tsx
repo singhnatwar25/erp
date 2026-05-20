@@ -1,47 +1,11 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
-import Link from 'next/link';
-import { 
-  FileText, 
-  Plus, 
-  Download, 
-  Eye, 
-  Edit, 
-  Trash2, 
-  Search,
-  Filter,
-  Calendar,
-  DollarSign,
-  Settings,
-  Layout,
-  CheckSquare,
-  X,
-  ArrowUpRight
-} from 'lucide-react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Download, Edit2, Eye, Plus, Search, Trash2 } from 'lucide-react';
+import { Badge, EmptyState, ERPShell, Panel, money } from '@/app/components/erp-shell';
 import { billPDFGenerator, type BillData } from '@/lib/pdf-generator';
 
-// Types
-interface BillField {
-  id: string;
-  name: string;
-  label: string;
-  type: 'text' | 'number' | 'date' | 'email' | 'phone' | 'address' | 'select' | 'textarea' | 'checkbox';
-  required: boolean;
-  options?: string[];
-  defaultValue?: string;
-  order: number;
-}
-
-interface BillTemplate {
-  _id: string;
-  name: string;
-  description?: string;
-  fields: BillField[];
-  isActive: boolean;
-}
-
-interface Bill {
+type Bill = {
   _id: string;
   billId: string;
   templateId: string;
@@ -49,7 +13,6 @@ interface Bill {
   clientName: string;
   clientEmail?: string;
   clientPhone?: string;
-  clientAddress?: string;
   billNumber: string;
   issueDate: string;
   dueDate: string;
@@ -60,1265 +23,251 @@ interface Bill {
   total: number;
   currency: string;
   notes?: string;
-  items: {
-    description: string;
-    quantity: number;
-    unitPrice: number;
-    total: number;
-  }[];
-  customFields: Record<string, any>;
-  pdfUrl?: string;
-  createdAt: string;
-  updatedAt: string;
-}
-
-const formatCurrency = (amount: number) => {
-  return new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency: 'USD',
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0,
-  }).format(amount);
+  items: Array<{ description: string; quantity: number; unitPrice: number; total: number }>;
+  customFields: Record<string, unknown>;
 };
 
-const formatDate = (dateString: string) => {
-  return new Date(dateString).toLocaleDateString();
+type Template = {
+  _id: string;
+  name: string;
 };
 
-export default function BillManagement() {
+const emptyForm = {
+  templateId: 'default-template',
+  clientName: '',
+  clientEmail: '',
+  clientPhone: '',
+  billNumber: '',
+  issueDate: new Date().toISOString().slice(0, 10),
+  dueDate: new Date().toISOString().slice(0, 10),
+  status: 'draft' as Bill['status'],
+  taxRate: '0',
+  notes: '',
+  description: '',
+  quantity: '1',
+  unitPrice: '',
+};
+
+export default function BillsPage() {
   const [bills, setBills] = useState<Bill[]>([]);
-  const [templates, setTemplates] = useState<BillTemplate[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [filterStatus, setFilterStatus] = useState('');
-  const [activeTab, setActiveTab] = useState<'bills' | 'templates'>('bills');
-  
-  // Modal states
-  const [showBillModal, setShowBillModal] = useState(false);
-  const [showTemplateModal, setShowTemplateModal] = useState(false);
-  const [showPreviewModal, setShowPreviewModal] = useState(false);
-  const [editingBill, setEditingBill] = useState<Bill | null>(null);
-  const [editingTemplate, setEditingTemplate] = useState<BillTemplate | null>(null);
-  const [previewBill, setPreviewBill] = useState<Bill | null>(null);
-  const [selectedBills, setSelectedBills] = useState<string[]>([]);
-  
-  // Form states
-  const [billForm, setBillForm] = useState({
-    templateId: '',
-    clientName: '',
-    clientEmail: '',
-    clientPhone: '',
-    clientAddress: '',
-    billNumber: '',
-    issueDate: new Date().toISOString().split('T')[0],
-    dueDate: '',
-    taxRate: '0',
-    notes: '',
-    items: [{ description: '', quantity: 1, unitPrice: 0, total: 0 }],
-    customFields: {} as Record<string, any>,
-  });
-  
-  const [templateForm, setTemplateForm] = useState({
-    name: '',
-    description: '',
-    fields: [] as BillField[],
-  });
-
-  // Saved clients
-  const [savedClients, setSavedClients] = useState<{name: string, email: string, phone: string, address: string}[]>([]);
+  const [templates, setTemplates] = useState<Template[]>([]);
+  const [query, setQuery] = useState('');
+  const [editing, setEditing] = useState<Bill | null>(null);
+  const [preview, setPreview] = useState<Bill | null>(null);
+  const [showForm, setShowForm] = useState(false);
+  const [form, setForm] = useState(emptyForm);
 
   const fetchBills = useCallback(async () => {
-    try {
-      const queryParams = filterStatus ? `?status=${filterStatus}` : '';
-      const response = await fetch(`/api/bills${queryParams}`);
-      const data = await response.json();
-      if (data.success) {
-        setBills(data.data);
-      }
-    } catch (error) {
-      console.error('Error fetching bills:', error);
-    }
-  }, [filterStatus]);
-
-  const fetchTemplates = useCallback(async () => {
-    try {
-      const response = await fetch('/api/bills/templates');
-      const data = await response.json();
-      if (data.success) {
-        setTemplates(data.data);
-      }
-    } catch (error) {
-      console.error('Error fetching templates:', error);
-    }
+    const [billResponse, templateResponse] = await Promise.all([fetch('/api/bills'), fetch('/api/bills/templates')]);
+    const billPayload = await billResponse.json();
+    const templatePayload = await templateResponse.json();
+    if (billPayload.success) setBills(billPayload.data);
+    if (templatePayload.success) setTemplates(templatePayload.data);
   }, []);
 
   useEffect(() => {
-    setLoading(true);
-    Promise.all([fetchBills(), fetchTemplates()]).finally(() => {
-      setLoading(false);
-    });
-  }, [fetchBills, fetchTemplates]);
+    fetchBills();
+  }, [fetchBills]);
 
-  const handleCreateBill = () => {
-    setEditingBill(null);
-    setBillForm({
-      templateId: templates[0]?._id || '',
-      clientName: '',
-      clientEmail: '',
-      clientPhone: '',
-      clientAddress: '',
-      billNumber: '',
-      issueDate: new Date().toISOString().split('T')[0],
-      dueDate: '',
-      taxRate: '0',
-      notes: '',
-      items: [{ description: '', quantity: 1, unitPrice: 0, total: 0 }],
-      customFields: {},
-    });
-    setShowBillModal(true);
-  };
-
-  const handleEditBill = (bill: Bill) => {
-    setEditingBill(bill);
-    setBillForm({
-      templateId: bill.templateId,
-      clientName: bill.clientName,
-      clientEmail: bill.clientEmail || '',
-      clientPhone: bill.clientPhone || '',
-      clientAddress: bill.clientAddress || '',
-      billNumber: bill.billNumber,
-      issueDate: bill.issueDate.split('T')[0],
-      dueDate: bill.dueDate.split('T')[0],
-      taxRate: bill.taxRate.toString(),
-      notes: bill.notes || '',
-      items: bill.items,
-      customFields: bill.customFields || {},
-    });
-    setShowBillModal(true);
-  };
-
-  const handleDeleteBill = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this bill?')) return;
-    
-    try {
-      const response = await fetch(`/api/bills/${id}`, { method: 'DELETE' });
-      if (response.ok) {
-        fetchBills();
-      }
-    } catch (error) {
-      console.error('Error deleting bill:', error);
-    }
-  };
-
-  const handleDuplicateBill = (bill: Bill) => {
-    setEditingBill(null);
-    setBillForm({
-      templateId: bill.templateId,
-      clientName: bill.clientName,
-      clientEmail: bill.clientEmail || '',
-      clientPhone: bill.clientPhone || '',
-      clientAddress: bill.clientAddress || '',
-      billNumber: '',
-      issueDate: new Date().toISOString().split('T')[0],
-      dueDate: '',
-      taxRate: bill.taxRate.toString(),
-      notes: bill.notes || '',
-      items: bill.items,
-      customFields: bill.customFields || {},
-    });
-    setShowBillModal(true);
-  };
-
-  const handleStatusChange = async (billId: string, newStatus: string) => {
-    try {
-      const response = await fetch(`/api/bills/${billId}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: newStatus }),
-      });
-      if (response.ok) {
-        fetchBills();
-      }
-    } catch (error) {
-      console.error('Error updating status:', error);
-    }
-  };
-
-  const handlePreviewBill = (bill: Bill) => {
-    setPreviewBill(bill);
-    setShowPreviewModal(true);
-  };
-
-  const handleSaveClient = () => {
-    if (!billForm.clientName) return;
-    
-    const newClient = {
-      name: billForm.clientName,
-      email: billForm.clientEmail,
-      phone: billForm.clientPhone,
-      address: billForm.clientAddress,
-    };
-    
-    const existingIndex = savedClients.findIndex(c => c.name === newClient.name);
-    if (existingIndex === -1) {
-      setSavedClients([...savedClients, newClient]);
-    }
-  };
-
-  const handleSelectClient = (client: any) => {
-    setBillForm({
-      ...billForm,
-      clientName: client.name,
-      clientEmail: client.email,
-      clientPhone: client.phone,
-      clientAddress: client.address,
-    });
-  };
-
-  const handleToggleBillSelection = (billId: string) => {
-    setSelectedBills(prev => 
-      prev.includes(billId) ? prev.filter(id => id !== billId) : [...prev, billId]
-    );
-  };
-
-  const handleBulkStatusChange = async (newStatus: string) => {
-    if (selectedBills.length === 0) return;
-    
-    try {
-      await Promise.all(
-        selectedBills.map(id => 
-          fetch(`/api/bills/${id}`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ status: newStatus }),
-          })
-        )
-      );
-      setSelectedBills([]);
-      fetchBills();
-    } catch (error) {
-      console.error('Error bulk updating status:', error);
-    }
-  };
-
-  const handleExportCSV = () => {
-    const headers = ['Bill ID', 'Client', 'Email', 'Bill Number', 'Issue Date', 'Due Date', 'Status', 'Subtotal', 'Tax', 'Total'];
-    const rows = filteredBills.map(bill => [
-      bill.billId,
-      bill.clientName,
-      bill.clientEmail || '',
-      bill.billNumber,
-      bill.issueDate,
-      bill.dueDate,
-      bill.status,
-      bill.subtotal,
-      bill.taxAmount,
-      bill.total,
-    ]);
-    
-    const csvContent = [headers, ...rows].map(row => row.join(',')).join('\n');
-    const blob = new Blob([csvContent], { type: 'text/csv' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'bills-export.csv';
-    a.click();
-    URL.revokeObjectURL(url);
-  };
-
-  const handleDownloadPDF = async (bill: Bill) => {
-    try {
-      const billData: BillData = {
-        billId: bill.billId,
-        templateName: bill.templateName,
-        clientName: bill.clientName,
-        clientEmail: bill.clientEmail,
-        clientPhone: bill.clientPhone,
-        clientAddress: bill.clientAddress,
-        billNumber: bill.billNumber,
-        issueDate: bill.issueDate,
-        dueDate: bill.dueDate,
-        status: bill.status,
-        subtotal: bill.subtotal,
-        taxRate: bill.taxRate,
-        taxAmount: bill.taxAmount,
-        total: bill.total,
-        currency: bill.currency,
-        notes: bill.notes,
-        items: bill.items,
-        customFields: bill.customFields,
-      };
-
-      const pdfBlob = await billPDFGenerator.generatePDF(billData);
-      billPDFGenerator.downloadPDF(pdfBlob, `invoice-${bill.billNumber}.pdf`);
-    } catch (error) {
-      console.error('Error generating PDF:', error);
-      alert('Failed to generate PDF. Please try again.');
-    }
-  };
-
-  const handleSaveBill = async (e: React.FormEvent) => {
-    e.preventDefault();
-    
-    // Calculate item totals
-    const items = billForm.items.map(item => ({
-      ...item,
-      total: item.quantity * item.unitPrice,
-    }));
-    
-    const payload = {
-      ...billForm,
-      items,
-      taxRate: parseFloat(billForm.taxRate),
-    };
-    
-    try {
-      const url = editingBill ? `/api/bills/${editingBill._id}` : '/api/bills';
-      const method = editingBill ? 'PUT' : 'POST';
-      
-      const response = await fetch(url, {
-        method,
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
-      
-      const result = await response.json();
-      
-      if (response.ok) {
-        setShowBillModal(false);
-        fetchBills();
-      } else {
-        alert(`Failed to save bill: ${result.error || 'Unknown error'}`);
-      }
-    } catch (error) {
-      console.error('Error saving bill:', error);
-      alert('Failed to save bill. Please check your connection.');
-    }
-  };
-
-  const handleAddItem = () => {
-    setBillForm({
-      ...billForm,
-      items: [...billForm.items, { description: '', quantity: 1, unitPrice: 0, total: 0 }],
-    });
-  };
-
-  const handleUpdateItem = (index: number, field: string, value: any) => {
-    const items = [...billForm.items];
-    items[index] = { ...items[index], [field]: value };
-    
-    // Recalculate total if quantity or price changed
-    if (field === 'quantity' || field === 'unitPrice') {
-      items[index].total = items[index].quantity * items[index].unitPrice;
-    }
-    
-    setBillForm({ ...billForm, items });
-  };
-
-  const handleRemoveItem = (index: number) => {
-    if (billForm.items.length > 1) {
-      setBillForm({
-        ...billForm,
-        items: billForm.items.filter((_, i) => i !== index),
-      });
-    }
-  };
-
-  const getStatusColor = (status: string) => {
-    const colors: Record<string, string> = {
-      draft: '#64748B',
-      sent: '#459BBE',
-      paid: '#4E956A',
-      overdue: '#C55050',
-      cancelled: '#DC6F31',
-    };
-    return colors[status] || '#64748B';
-  };
-
-  const filteredBills = bills.filter(bill =>
-    bill.clientName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    bill.billNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    bill.templateName.toLowerCase().includes(searchTerm.toLowerCase())
+  const filtered = useMemo(
+    () => bills.filter((bill) => `${bill.clientName} ${bill.billNumber} ${bill.status}`.toLowerCase().includes(query.toLowerCase())),
+    [bills, query]
   );
 
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-[#191E2C] flex items-center justify-center">
-        <div className="flex items-center gap-3">
-          <div className="w-8 h-8 border-4 border-[#B9FF66] border-t-transparent rounded-full animate-spin" />
-          <span className="text-[#94A3B8]">Loading bills...</span>
-        </div>
-      </div>
-    );
-  }
+  const receivables = bills.filter((bill) => ['draft', 'sent', 'overdue'].includes(bill.status)).reduce((sum, bill) => sum + Number(bill.total || 0), 0);
+
+  const startCreate = () => {
+    setEditing(null);
+    setForm({ ...emptyForm, templateId: templates[0]?._id || 'default-template' });
+    setShowForm(true);
+  };
+
+  const startEdit = (bill: Bill) => {
+    const firstItem = bill.items?.[0] ?? { description: '', quantity: 1, unitPrice: 0 };
+    setEditing(bill);
+    setForm({
+      templateId: bill.templateId,
+      clientName: bill.clientName,
+      clientEmail: bill.clientEmail ?? '',
+      clientPhone: bill.clientPhone ?? '',
+      billNumber: bill.billNumber,
+      issueDate: bill.issueDate?.slice(0, 10) || emptyForm.issueDate,
+      dueDate: bill.dueDate?.slice(0, 10) || emptyForm.dueDate,
+      status: bill.status,
+      taxRate: String(bill.taxRate ?? 0),
+      notes: bill.notes ?? '',
+      description: firstItem.description,
+      quantity: String(firstItem.quantity),
+      unitPrice: String(firstItem.unitPrice),
+    });
+    setShowForm(true);
+  };
+
+  const saveBill = async (event: React.FormEvent) => {
+    event.preventDefault();
+    const quantity = Number(form.quantity || 0);
+    const unitPrice = Number(form.unitPrice || 0);
+    const item = { description: form.description, quantity, unitPrice, total: quantity * unitPrice };
+    const response = await fetch(editing ? `/api/bills/${editing._id}` : '/api/bills', {
+      method: editing ? 'PUT' : 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        templateId: form.templateId,
+        clientName: form.clientName,
+        clientEmail: form.clientEmail,
+        clientPhone: form.clientPhone,
+        billNumber: form.billNumber,
+        issueDate: form.issueDate,
+        dueDate: form.dueDate,
+        status: form.status,
+        taxRate: Number(form.taxRate || 0),
+        notes: form.notes,
+        items: [item],
+        customFields: {},
+      }),
+    });
+    const payload = await response.json();
+    if (payload.success) {
+      setShowForm(false);
+      fetchBills();
+    }
+  };
+
+  const deleteBill = async (bill: Bill) => {
+    if (!confirm(`Delete invoice ${bill.billNumber}?`)) return;
+    await fetch(`/api/bills/${bill._id}`, { method: 'DELETE' });
+    fetchBills();
+  };
+
+  const downloadPDF = async (bill: Bill) => {
+    const pdfBlob = await billPDFGenerator.generatePDF(bill as BillData);
+    billPDFGenerator.downloadPDF(pdfBlob, `invoice-${bill.billNumber}.pdf`);
+  };
 
   return (
-    <div className="min-h-screen bg-[#191E2C] flex">
-      {/* Sidebar */}
-      <aside className="fixed left-0 top-0 h-full w-[260px] bg-[#1E2538] border-r border-white/5 z-50 flex flex-col">
-        {/* Logo */}
-        <div className="p-6 border-b border-white/5">
-          <Link href="/" className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-[#B9FF66] flex items-center justify-center">
-              <FileText className="h-5 w-5 text-[#191E2C]" />
-            </div>
-            <span className="text-xl font-bold text-white">Bills</span>
-          </Link>
-        </div>
-
-        {/* Nav Items */}
-        <nav className="flex-1 p-4 space-y-1">
-          <Link
-            href="/"
-            className="flex items-center gap-3 px-4 py-3 rounded-xl transition-colors text-[#94A3B8] hover:bg-white/5 hover:text-white"
-          >
-            <Layout className="h-5 w-5" />
-            <span>Dashboard</span>
-          </Link>
-          <Link
-            href={{ pathname: '/bills' }}
-            className="flex items-center gap-3 px-4 py-3 rounded-xl transition-colors bg-[#B9FF66] text-[#191E2C] font-medium"
-          >
-            <FileText className="h-5 w-5" />
-            <span>Bills</span>
-          </Link>
-        </nav>
-      </aside>
-
-      {/* Main Content */}
-      <main className="flex-1 ml-[260px] p-8">
-        {/* Header */}
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 mb-8">
-          <div>
-            <h1 className="text-4xl font-bold text-white mb-2">Bill Management</h1>
-            <p className="text-[#94A3B8]">Create and manage invoices and bills</p>
+    <ERPShell
+      title="Bills"
+      description="Create invoices, track payment status, and export PDF bills."
+      action={<button onClick={startCreate} className="btn-lime rounded-lg px-4"><Plus className="h-4 w-4" />New bill</button>}
+    >
+      <div className="grid grid-cols-1 gap-5 xl:grid-cols-[1fr_420px]">
+        <div className="space-y-5">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
+            <Metric label="Invoices" value={bills.length} />
+            <Metric label="Receivables" value={money(receivables)} />
+            <Metric label="Paid" value={bills.filter((bill) => bill.status === 'paid').length} tone="up" />
+            <Metric label="Overdue" value={bills.filter((bill) => bill.status === 'overdue').length} tone="down" />
           </div>
-          
-          <div className="flex items-center gap-3">
-            <button
-              onClick={() => setShowTemplateModal(true)}
-              className="btn-dark flex items-center gap-2"
-            >
-              <Settings className="h-4 w-4" />
-              <span>Templates</span>
-            </button>
-            <button
-              onClick={handleCreateBill}
-              className="btn-lime flex items-center gap-2"
-            >
-              <Plus className="h-4 w-4" />
-              <span>New Bill</span>
-            </button>
-          </div>
-        </div>
-
-        {/* Tabs */}
-        <div className="flex items-center gap-6 mb-8 border-b border-white/10">
-          <button
-            onClick={() => setActiveTab('bills')}
-            className={`pb-3 px-1 font-medium transition-colors ${
-              activeTab === 'bills'
-                ? 'text-white border-b-2 border-[#B9FF66]'
-                : 'text-[#64748B] hover:text-white'
-            }`}
-          >
-            Bills ({bills.length})
-          </button>
-          <button
-            onClick={() => setActiveTab('templates')}
-            className={`pb-3 px-1 font-medium transition-colors ${
-              activeTab === 'templates'
-                ? 'text-white border-b-2 border-[#B9FF66]'
-                : 'text-[#64748B] hover:text-white'
-            }`}
-          >
-            Templates ({templates.length})
-          </button>
-        </div>
-
-        {/* Bills Tab */}
-        {activeTab === 'bills' && (
-          <>
-            {/* Search and Filter */}
-            <div className="flex flex-col sm:flex-row gap-4 mb-6">
-              <div className="flex-1 relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[#64748B]" />
-                <input
-                  type="text"
-                  placeholder="Search bills..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="input-dark pl-10 w-full"
-                />
-              </div>
-              <select
-                value={filterStatus}
-                onChange={(e) => setFilterStatus(e.target.value)}
-                className="input-dark"
-              >
-                <option value="">All Status</option>
-                <option value="draft">Draft</option>
-                <option value="sent">Sent</option>
-                <option value="paid">Paid</option>
-                <option value="overdue">Overdue</option>
-                <option value="cancelled">Cancelled</option>
-              </select>
-              <button
-                onClick={handleExportCSV}
-                className="btn-dark flex items-center gap-2"
-              >
-                <Download className="h-4 w-4" />
-                <span>Export CSV</span>
-              </button>
+          <Panel>
+            <div className="relative mb-4">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#6b7280]" />
+              <input className="input-dark pl-10" placeholder="Search invoices" value={query} onChange={(e) => setQuery(e.target.value)} />
             </div>
-
-            {/* Bulk Actions */}
-            {selectedBills.length > 0 && (
-              <div className="card-dark p-4 mb-6 flex items-center justify-between">
-                <span className="text-white">{selectedBills.length} bills selected</span>
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => handleBulkStatusChange('sent')}
-                    className="btn-dark text-sm"
-                  >
-                    Mark as Sent
-                  </button>
-                  <button
-                    onClick={() => handleBulkStatusChange('paid')}
-                    className="btn-dark text-sm"
-                  >
-                    Mark as Paid
-                  </button>
-                  <button
-                    onClick={() => setSelectedBills([])}
-                    className="btn-dark text-sm text-[#C55050]"
-                  >
-                    Clear Selection
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {/* Bills List */}
-            <div className="card-dark">
-              <div className="overflow-x-auto">
-                <table className="w-full">
-                  <thead>
-                    <tr className="border-b border-white/5">
-                      <th className="text-left p-4 text-[#94A3B8] font-medium">
-                        <input
-                          type="checkbox"
-                          checked={selectedBills.length === filteredBills.length && filteredBills.length > 0}
-                          onChange={(e) => {
-                            if (e.target.checked) {
-                              setSelectedBills(filteredBills.map(b => b._id));
-                            } else {
-                              setSelectedBills([]);
-                            }
-                          }}
-                          className="w-4 h-4 rounded border-white/20 bg-[#252B3D] text-[#B9FF66] focus:ring-[#B9FF66]"
-                        />
-                      </th>
-                      <th className="text-left p-4 text-[#94A3B8] font-medium">Bill #</th>
-                      <th className="text-left p-4 text-[#94A3B8] font-medium">Client</th>
-                      <th className="text-left p-4 text-[#94A3B8] font-medium">Template</th>
-                      <th className="text-left p-4 text-[#94A3B8] font-medium">Issue Date</th>
-                      <th className="text-left p-4 text-[#94A3B8] font-medium">Due Date</th>
-                      <th className="text-left p-4 text-[#94A3B8] font-medium">Total</th>
-                      <th className="text-left p-4 text-[#94A3B8] font-medium">Status</th>
-                      <th className="text-left p-4 text-[#94A3B8] font-medium">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filteredBills.map((bill) => (
-                      <tr key={bill._id} className="border-b border-white/5 hover:bg-white/5">
-                        <td className="p-4">
-                          <input
-                            type="checkbox"
-                            checked={selectedBills.includes(bill._id)}
-                            onChange={() => handleToggleBillSelection(bill._id)}
-                            className="w-4 h-4 rounded border-white/20 bg-[#252B3D] text-[#B9FF66] focus:ring-[#B9FF66]"
-                          />
-                        </td>
-                        <td className="p-4">
-                          <span className="font-mono text-sm text-white">{bill.billId}</span>
-                        </td>
-                        <td className="p-4">
-                          <div>
-                            <p className="font-medium text-white">{bill.clientName}</p>
-                            {bill.clientEmail && (
-                              <p className="text-xs text-[#64748B]">{bill.clientEmail}</p>
-                            )}
-                          </div>
-                        </td>
-                        <td className="p-4">
-                          <span className="text-sm text-[#94A3B8]">{bill.templateName}</span>
-                        </td>
-                        <td className="p-4">
-                          <span className="text-sm text-[#94A3B8]">{formatDate(bill.issueDate)}</span>
-                        </td>
-                        <td className="p-4">
-                          <span className="text-sm text-[#94A3B8]">{formatDate(bill.dueDate)}</span>
-                        </td>
-                        <td className="p-4">
-                          <span className="font-medium text-white">{formatCurrency(bill.total)}</span>
-                        </td>
-                        <td className="p-4">
-                          <select
-                            value={bill.status}
-                            onChange={(e) => handleStatusChange(bill._id, e.target.value)}
-                            className="input-dark text-xs py-1 px-2"
-                          >
-                            <option value="draft">Draft</option>
-                            <option value="sent">Sent</option>
-                            <option value="paid">Paid</option>
-                            <option value="overdue">Overdue</option>
-                            <option value="cancelled">Cancelled</option>
-                          </select>
-                        </td>
-                        <td className="p-4">
-                          <div className="flex items-center gap-2">
-                            <button
-                              onClick={() => handleEditBill(bill)}
-                              className="w-8 h-8 rounded-lg bg-[#3D55B6]/20 text-[#8BA4FF] flex items-center justify-center hover:bg-[#3D55B6]/30"
-                              title="Edit"
-                            >
-                              <Edit className="w-4 h-4" />
-                            </button>
-                            <button
-                              onClick={() => handleDuplicateBill(bill)}
-                              className="w-8 h-8 rounded-lg bg-[#BC5FCF]/20 text-[#D9A0FF] flex items-center justify-center hover:bg-[#BC5FCF]/30"
-                              title="Duplicate"
-                            >
-                              <Plus className="w-4 h-4" />
-                            </button>
-                            <button
-                              onClick={() => handlePreviewBill(bill)}
-                              className="w-8 h-8 rounded-lg bg-[#459BBE]/20 text-[#7DD3E8] flex items-center justify-center hover:bg-[#459BBE]/30"
-                              title="Preview"
-                            >
-                              <Eye className="w-4 h-4" />
-                            </button>
-                            <button
-                              onClick={() => handleDownloadPDF(bill)}
-                              className="w-8 h-8 rounded-lg bg-[#4E956A]/20 text-[#7DD3A0] flex items-center justify-center hover:bg-[#4E956A]/30"
-                              title="Download PDF"
-                            >
-                              <Download className="w-4 h-4" />
-                            </button>
-                            <button
-                              onClick={() => handleDeleteBill(bill._id)}
-                              className="w-8 h-8 rounded-lg bg-[#C55050]/20 text-[#FF9B9B] flex items-center justify-center hover:bg-[#C55050]/30"
-                              title="Delete"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-                
-                {filteredBills.length === 0 && (
-                  <div className="text-center py-12">
-                    <FileText className="h-12 w-12 text-[#64748B] mx-auto mb-4" />
-                    <p className="text-[#64748B]">No bills found</p>
-                    <button
-                      onClick={handleCreateBill}
-                      className="btn-lime mt-4"
-                    >
-                      Create your first bill
-                    </button>
-                  </div>
-                )}
-              </div>
-            </div>
-          </>
-        )}
-
-        {/* Templates Tab */}
-        {activeTab === 'templates' && (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {templates.map((template) => (
-              <div key={template._id} className="card-dark p-6">
-                <div className="flex items-start justify-between mb-4">
-                  <div>
-                    <h3 className="text-lg font-bold text-white mb-1">{template.name}</h3>
-                    {template.description && (
-                      <p className="text-sm text-[#64748B]">{template.description}</p>
-                    )}
-                  </div>
-                  <div className="w-8 h-8 rounded-lg bg-[#B9FF66]/20 flex items-center justify-center">
-                    <Layout className="h-4 w-4 text-[#B9FF66]" />
-                  </div>
-                </div>
-                
-                <div className="mb-4">
-                  <p className="text-sm text-[#94A3B8] mb-2">Fields ({template.fields.length})</p>
-                  <div className="flex flex-wrap gap-1">
-                    {template.fields.slice(0, 3).map((field) => (
-                      <span
-                        key={field.id}
-                        className="px-2 py-1 bg-[#252B3D] rounded text-xs text-[#94A3B8]"
-                      >
-                        {field.label}
-                      </span>
-                    ))}
-                    {template.fields.length > 3 && (
-                      <span className="px-2 py-1 bg-[#252B3D] rounded text-xs text-[#94A3B8]">
-                        +{template.fields.length - 3} more
-                      </span>
-                    )}
-                  </div>
-                </div>
-                
-                <div className="flex items-center gap-2">
-                  <button className="btn-dark flex-1">
-                    <Edit className="h-4 w-4" />
-                    Edit
-                  </button>
-                  <button className="btn-dark flex-1">
-                    <CheckSquare className="h-4 w-4" />
-                    Use
-                  </button>
-                </div>
-              </div>
-            ))}
-            
-            <button
-              onClick={() => setShowTemplateModal(true)}
-              className="card-dark p-6 border-2 border-dashed border-white/10 hover:border-[#B9FF66]/50 transition-colors"
-            >
-              <Plus className="h-8 w-8 text-[#64748B] mx-auto mb-3" />
-              <p className="text-[#94A3B8]">Create Template</p>
-            </button>
-          </div>
-        )}
-
-        {/* Bill Modal */}
-        {showBillModal && (
-          <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-            <div className="bg-[#252B3D] rounded-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
-              <form onSubmit={handleSaveBill}>
-                <div className="p-6 border-b border-white/10">
-                  <h2 className="text-xl font-bold text-white">
-                    {editingBill ? 'Edit Bill' : 'Create New Bill'}
-                  </h2>
-                </div>
-                
-                <div className="p-6 space-y-6">
-                  {/* Template Selection */}
-                  <div>
-                    <label className="block text-sm text-[#94A3B8] mb-2">Template</label>
-                    <select
-                      value={billForm.templateId}
-                      onChange={(e) => setBillForm({ ...billForm, templateId: e.target.value })}
-                      className="input-dark w-full"
-                      required
-                    >
-                      <option value="">Select Template</option>
-                      {templates.map((template) => (
-                        <option key={template._id} value={template._id}>
-                          {template.name}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  {/* Client Information */}
-                  <div>
-                    <div className="flex items-center justify-between mb-2">
-                      <label className="block text-sm text-[#94A3B8]">Client Information</label>
-                      {savedClients.length > 0 && (
-                        <select
-                          onChange={(e) => {
-                            if (e.target.value) {
-                              const client = savedClients.find(c => c.name === e.target.value);
-                              if (client) handleSelectClient(client);
-                            }
-                          }}
-                          className="input-dark text-xs py-1 px-2"
-                        >
-                          <option value="">Select saved client</option>
-                          {savedClients.map((client, idx) => (
-                            <option key={idx} value={client.name}>{client.name}</option>
-                          ))}
-                        </select>
-                      )}
-                    </div>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div>
-                        <label className="block text-sm text-[#94A3B8] mb-2">Client Name *</label>
-                        <input
-                          type="text"
-                          value={billForm.clientName}
-                          onChange={(e) => setBillForm({ ...billForm, clientName: e.target.value })}
-                          className="input-dark w-full"
-                          required
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-sm text-[#94A3B8] mb-2">Client Email</label>
-                        <input
-                          type="email"
-                          value={billForm.clientEmail}
-                          onChange={(e) => setBillForm({ ...billForm, clientEmail: e.target.value })}
-                          className="input-dark w-full"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-sm text-[#94A3B8] mb-2">Client Phone</label>
-                        <input
-                          type="tel"
-                          value={billForm.clientPhone}
-                          onChange={(e) => setBillForm({ ...billForm, clientPhone: e.target.value })}
-                          className="input-dark w-full"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-sm text-[#94A3B8] mb-2">Bill Number *</label>
-                        <input
-                          type="text"
-                          value={billForm.billNumber}
-                          onChange={(e) => setBillForm({ ...billForm, billNumber: e.target.value })}
-                          className="input-dark w-full"
-                          required
-                        />
-                      </div>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={handleSaveClient}
-                      className="mt-2 btn-dark text-sm"
-                    >
-                      Save Client for Future Use
-                    </button>
-                  </div>
-
-                  {/* Dates */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-sm text-[#94A3B8] mb-2">Issue Date *</label>
-                      <input
-                        type="date"
-                        value={billForm.issueDate}
-                        onChange={(e) => setBillForm({ ...billForm, issueDate: e.target.value })}
-                        className="input-dark w-full"
-                        required
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm text-[#94A3B8] mb-2">Due Date *</label>
-                      <input
-                        type="date"
-                        value={billForm.dueDate}
-                        onChange={(e) => setBillForm({ ...billForm, dueDate: e.target.value })}
-                        className="input-dark w-full"
-                        required
-                      />
-                    </div>
-                  </div>
-
-                  {/* Items */}
-                  <div>
-                    <div className="flex items-center justify-between mb-4">
-                      <label className="block text-sm text-[#94A3B8]">Items</label>
-                      <button
-                        type="button"
-                        onClick={handleAddItem}
-                        className="btn-lime text-sm"
-                      >
-                        <Plus className="h-4 w-4" />
-                        Add Item
-                      </button>
-                    </div>
-                    
-                    <div className="space-y-3">
-                      {billForm.items.map((item, index) => (
-                        <div key={index} className="grid grid-cols-12 gap-2">
-                          <div className="col-span-6">
-                            <input
-                              type="text"
-                              placeholder="Description"
-                              value={item.description}
-                              onChange={(e) => handleUpdateItem(index, 'description', e.target.value)}
-                              className="input-dark w-full"
-                              required
-                            />
-                          </div>
-                          <div className="col-span-2">
-                            <input
-                              type="number"
-                              min="1"
-                              placeholder="Qty"
-                              value={item.quantity}
-                              onChange={(e) => handleUpdateItem(index, 'quantity', parseInt(e.target.value) || 1)}
-                              className="input-dark w-full"
-                              required
-                            />
-                          </div>
-                          <div className="col-span-2">
-                            <input
-                              type="number"
-                              min="0"
-                              step="0.01"
-                              placeholder="Price"
-                              value={item.unitPrice}
-                              onChange={(e) => handleUpdateItem(index, 'unitPrice', parseFloat(e.target.value) || 0)}
-                              className="input-dark w-full"
-                              required
-                            />
-                          </div>
-                          <div className="col-span-1">
-                            <input
-                              type="text"
-                              value={formatCurrency(item.total)}
-                              readOnly
-                              className="input-dark w-full bg-[#1E2538]"
-                            />
-                          </div>
-                          <div className="col-span-1">
-                            <button
-                              type="button"
-                              onClick={() => handleRemoveItem(index)}
-                              className="w-full h-10 rounded-lg bg-[#C55050]/20 text-[#FF9B9B] flex items-center justify-center hover:bg-[#C55050]/30"
-                              disabled={billForm.items.length === 1}
-                            >
-                              <X className="h-4 w-4" />
-                            </button>
-                          </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="border-b border-[#ded8c8] text-left text-xs uppercase text-[#6b7280]">
+                  <tr>
+                    <th className="py-3 pr-4">Invoice</th>
+                    <th className="py-3 pr-4">Client</th>
+                    <th className="py-3 pr-4">Due</th>
+                    <th className="py-3 pr-4">Total</th>
+                    <th className="py-3 pr-4">Status</th>
+                    <th className="py-3 text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[#ded8c8]">
+                  {filtered.map((bill) => (
+                    <tr key={bill._id}>
+                      <td className="py-3 pr-4">
+                        <p className="font-semibold">{bill.billNumber}</p>
+                        <p className="text-xs text-[#6b7280]">{bill.billId}</p>
+                      </td>
+                      <td className="py-3 pr-4">{bill.clientName}</td>
+                      <td className="py-3 pr-4">{new Date(bill.dueDate).toLocaleDateString()}</td>
+                      <td className="py-3 pr-4 font-semibold">{money(bill.total)}</td>
+                      <td className="py-3 pr-4"><Badge tone={bill.status === 'paid' ? 'up' : bill.status === 'overdue' ? 'down' : 'neutral'}>{bill.status}</Badge></td>
+                      <td className="py-3">
+                        <div className="flex justify-end gap-2">
+                          <button onClick={() => setPreview(bill)} className="btn-dark rounded-lg px-3"><Eye className="h-4 w-4" /></button>
+                          <button onClick={() => downloadPDF(bill)} className="btn-dark rounded-lg px-3"><Download className="h-4 w-4" /></button>
+                          <button onClick={() => startEdit(bill)} className="btn-dark rounded-lg px-3"><Edit2 className="h-4 w-4" /></button>
+                          <button onClick={() => deleteBill(bill)} className="btn-dark rounded-lg px-3 text-[#b42318]"><Trash2 className="h-4 w-4" /></button>
                         </div>
-                      ))}
-                    </div>
-                  </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {filtered.length === 0 && <EmptyState text="No bills found" />}
+            </div>
+          </Panel>
+        </div>
 
-                  {/* Tax and Notes */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-sm text-[#94A3B8] mb-2">Tax Rate (%)</label>
-                      <input
-                        type="number"
-                        min="0"
-                        max="100"
-                        step="0.1"
-                        value={billForm.taxRate}
-                        onChange={(e) => setBillForm({ ...billForm, taxRate: e.target.value })}
-                        className="input-dark w-full"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm text-[#94A3B8] mb-2">Notes</label>
-                      <textarea
-                        value={billForm.notes}
-                        onChange={(e) => setBillForm({ ...billForm, notes: e.target.value })}
-                        className="input-dark w-full h-20"
-                        placeholder="Additional notes..."
-                      />
-                    </div>
-                  </div>
+        <div className="space-y-5">
+          <Panel title={showForm ? (editing ? 'Edit Bill' : 'New Bill') : 'Bill Form'}>
+            {showForm ? (
+              <form onSubmit={saveBill} className="space-y-3">
+                <Select value={form.templateId} onChange={(v) => setForm({ ...form, templateId: v })} options={templates.map((template) => template._id)} labels={Object.fromEntries(templates.map((template) => [template._id, template.name]))} />
+                <Field value={form.clientName} onChange={(v) => setForm({ ...form, clientName: v })} placeholder="Client name" required />
+                <div className="grid grid-cols-2 gap-3">
+                  <Field type="email" value={form.clientEmail} onChange={(v) => setForm({ ...form, clientEmail: v })} placeholder="Email" />
+                  <Field value={form.clientPhone} onChange={(v) => setForm({ ...form, clientPhone: v })} placeholder="Phone" />
                 </div>
-
-                <div className="p-6 border-t border-white/10 flex justify-end gap-3">
-                  <button
-                    type="button"
-                    onClick={() => setShowBillModal(false)}
-                    className="btn-dark"
-                  >
-                    Cancel
-                  </button>
-                  <button type="submit" className="btn-lime">
-                    {editingBill ? 'Update' : 'Create'} Bill
-                  </button>
+                <div className="grid grid-cols-2 gap-3">
+                  <Field value={form.billNumber} onChange={(v) => setForm({ ...form, billNumber: v })} placeholder="Invoice number" required />
+                  <Select value={form.status} onChange={(v) => setForm({ ...form, status: v as Bill['status'] })} options={['draft', 'sent', 'paid', 'overdue', 'cancelled']} />
                 </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <Field type="date" value={form.issueDate} onChange={(v) => setForm({ ...form, issueDate: v })} />
+                  <Field type="date" value={form.dueDate} onChange={(v) => setForm({ ...form, dueDate: v })} />
+                </div>
+                <Field value={form.description} onChange={(v) => setForm({ ...form, description: v })} placeholder="Line item description" required />
+                <div className="grid grid-cols-3 gap-3">
+                  <Field type="number" value={form.quantity} onChange={(v) => setForm({ ...form, quantity: v })} placeholder="Qty" required />
+                  <Field type="number" value={form.unitPrice} onChange={(v) => setForm({ ...form, unitPrice: v })} placeholder="Price" required />
+                  <Field type="number" value={form.taxRate} onChange={(v) => setForm({ ...form, taxRate: v })} placeholder="Tax %" />
+                </div>
+                <textarea className="input-dark min-h-[80px]" value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} placeholder="Notes" />
+                <button type="submit" className="btn-lime w-full rounded-lg">{editing ? 'Update' : 'Create'} bill</button>
               </form>
-            </div>
-          </div>
-        )}
+            ) : <EmptyState text="Select New bill or edit an invoice." />}
+          </Panel>
 
-        {/* Preview Modal */}
-        {showPreviewModal && previewBill && (
-          <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-            <div className="bg-white rounded-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
-              <div className="p-6 border-b border-gray-200 flex items-center justify-between">
-                <h2 className="text-xl font-bold text-gray-900">Bill Preview</h2>
-                <button
-                  onClick={() => setShowPreviewModal(false)}
-                  className="w-8 h-8 rounded-lg bg-gray-100 flex items-center justify-center hover:bg-gray-200"
-                >
-                  <X className="h-5 w-5 text-gray-600" />
-                </button>
-              </div>
-              
-              <div className="p-8">
-                <div className="mb-8">
-                  <h1 className="text-3xl font-bold text-gray-900 mb-2">INVOICE</h1>
-                  <p className="text-gray-600">Bill #{previewBill.billNumber}</p>
+          <Panel title="Preview">
+            {preview ? (
+              <div className="space-y-3 text-sm">
+                <div>
+                  <p className="text-xs uppercase text-[#6b7280]">Invoice</p>
+                  <p className="text-xl font-bold">{preview.billNumber}</p>
                 </div>
-
-                <div className="grid grid-cols-2 gap-8 mb-8">
-                  <div>
-                    <h3 className="font-semibold text-gray-900 mb-2">Bill To:</h3>
-                    <p className="text-gray-700">{previewBill.clientName}</p>
-                    {previewBill.clientEmail && <p className="text-gray-600">{previewBill.clientEmail}</p>}
-                    {previewBill.clientPhone && <p className="text-gray-600">{previewBill.clientPhone}</p>}
-                  </div>
-                  <div className="text-right">
-                    <p className="text-gray-600"><strong>Issue Date:</strong> {formatDate(previewBill.issueDate)}</p>
-                    <p className="text-gray-600"><strong>Due Date:</strong> {formatDate(previewBill.dueDate)}</p>
-                    <p className="text-gray-600"><strong>Status:</strong> {previewBill.status.toUpperCase()}</p>
-                  </div>
-                </div>
-
-                <table className="w-full mb-8">
-                  <thead>
-                    <tr className="border-b-2 border-gray-200">
-                      <th className="text-left py-3 text-gray-700">Description</th>
-                      <th className="text-right py-3 text-gray-700">Quantity</th>
-                      <th className="text-right py-3 text-gray-700">Unit Price</th>
-                      <th className="text-right py-3 text-gray-700">Total</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {previewBill.items.map((item, index) => (
-                      <tr key={index} className="border-b border-gray-100">
-                        <td className="py-3 text-gray-700">{item.description}</td>
-                        <td className="py-3 text-right text-gray-700">{item.quantity}</td>
-                        <td className="py-3 text-right text-gray-700">{formatCurrency(item.unitPrice)}</td>
-                        <td className="py-3 text-right text-gray-700">{formatCurrency(item.total)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-
-                <div className="flex justify-end mb-8">
-                  <div className="w-64">
-                    <div className="flex justify-between mb-2">
-                      <span className="text-gray-600">Subtotal:</span>
-                      <span className="text-gray-900">{formatCurrency(previewBill.subtotal)}</span>
+                <p><strong>Client:</strong> {preview.clientName}</p>
+                <p><strong>Due:</strong> {new Date(preview.dueDate).toLocaleDateString()}</p>
+                <div className="rounded-lg border border-[#ded8c8] p-3">
+                  {preview.items.map((item, index) => (
+                    <div key={index} className="flex justify-between">
+                      <span>{item.description}</span>
+                      <span>{money(item.total)}</span>
                     </div>
-                    {previewBill.taxRate > 0 && (
-                      <div className="flex justify-between mb-2">
-                        <span className="text-gray-600">Tax ({previewBill.taxRate}%):</span>
-                        <span className="text-gray-900">{formatCurrency(previewBill.taxAmount)}</span>
-                      </div>
-                    )}
-                    <div className="flex justify-between pt-2 border-t-2 border-gray-200">
-                      <span className="font-semibold text-gray-900">Total:</span>
-                      <span className="font-bold text-gray-900">{formatCurrency(previewBill.total)}</span>
-                    </div>
-                  </div>
+                  ))}
                 </div>
-
-                {previewBill.notes && (
-                  <div className="mb-8">
-                    <h3 className="font-semibold text-gray-900 mb-2">Notes:</h3>
-                    <p className="text-gray-600">{previewBill.notes}</p>
-                  </div>
-                )}
-
-                <div className="flex justify-end gap-3">
-                  <button
-                    onClick={() => setShowPreviewModal(false)}
-                    className="px-4 py-2 rounded-lg bg-gray-100 text-gray-700 hover:bg-gray-200"
-                  >
-                    Close
-                  </button>
-                  <button
-                    onClick={() => {
-                      handleDownloadPDF(previewBill);
-                      setShowPreviewModal(false);
-                    }}
-                    className="px-4 py-2 rounded-lg bg-[#B9FF66] text-gray-900 hover:bg-[#A8E658]"
-                  >
-                    Download PDF
-                  </button>
-                </div>
+                <p className="text-right text-lg font-bold">Total {money(preview.total)}</p>
               </div>
-            </div>
-          </div>
-        )}
-
-        {/* Template Modal */}
-        {showTemplateModal && (
-          <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-            <div className="bg-[#252B3D] rounded-2xl max-w-3xl w-full max-h-[90vh] overflow-y-auto">
-              <div className="p-6 border-b border-white/10">
-                <h2 className="text-xl font-bold text-white">Create Custom Template</h2>
-              </div>
-              
-              <div className="p-6 space-y-6">
-                <div>
-                  <label className="block text-sm text-[#94A3B8] mb-2">Template Name *</label>
-                  <input
-                    type="text"
-                    value={templateForm.name}
-                    onChange={(e) => setTemplateForm({ ...templateForm, name: e.target.value })}
-                    className="input-dark w-full"
-                    placeholder="e.g., Service Invoice, Product Invoice"
-                    required
-                  />
-                </div>
-                
-                <div>
-                  <label className="block text-sm text-[#94A3B8] mb-2">Description</label>
-                  <textarea
-                    value={templateForm.description}
-                    onChange={(e) => setTemplateForm({ ...templateForm, description: e.target.value })}
-                    className="input-dark w-full h-20"
-                    placeholder="Describe when to use this template..."
-                  />
-                </div>
-
-                <div>
-                  <div className="flex items-center justify-between mb-4">
-                    <label className="block text-sm text-[#94A3B8]">Custom Fields</label>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const newField: BillField = {
-                          id: `field-${Date.now()}`,
-                          name: `field_${templateForm.fields.length + 1}`,
-                          label: 'New Field',
-                          type: 'text',
-                          required: false,
-                          order: templateForm.fields.length + 1,
-                        };
-                        setTemplateForm({
-                          ...templateForm,
-                          fields: [...templateForm.fields, newField],
-                        });
-                      }}
-                      className="btn-lime text-sm"
-                    >
-                      <Plus className="h-4 w-4" />
-                      Add Field
-                    </button>
-                  </div>
-
-                  <div className="space-y-3">
-                    {templateForm.fields.map((field, index) => (
-                      <div key={field.id} className="card-dark p-4">
-                        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                          <div className="md:col-span-2">
-                            <label className="block text-xs text-[#64748B] mb-1">Field Label</label>
-                            <input
-                              type="text"
-                              value={field.label}
-                              onChange={(e) => {
-                                const fields = [...templateForm.fields];
-                                fields[index].label = e.target.value;
-                                fields[index].name = e.target.value.toLowerCase().replace(/\s+/g, '_');
-                                setTemplateForm({ ...templateForm, fields });
-                              }}
-                              className="input-dark w-full"
-                              placeholder="Field Label"
-                            />
-                          </div>
-                          <div>
-                            <label className="block text-xs text-[#64748B] mb-1">Field Type</label>
-                            <select
-                              value={field.type}
-                              onChange={(e) => {
-                                const fields = [...templateForm.fields];
-                                fields[index].type = e.target.value as BillField['type'];
-                                setTemplateForm({ ...templateForm, fields });
-                              }}
-                              className="input-dark w-full"
-                            >
-                              <option value="text">Text</option>
-                              <option value="number">Number</option>
-                              <option value="date">Date</option>
-                              <option value="email">Email</option>
-                              <option value="phone">Phone</option>
-                              <option value="address">Address</option>
-                              <option value="select">Select</option>
-                              <option value="textarea">Textarea</option>
-                              <option value="checkbox">Checkbox</option>
-                            </select>
-                          </div>
-                          <div className="flex items-end">
-                            <label className="flex items-center gap-2 cursor-pointer">
-                              <input
-                                type="checkbox"
-                                checked={field.required}
-                                onChange={(e) => {
-                                  const fields = [...templateForm.fields];
-                                  fields[index].required = e.target.checked;
-                                  setTemplateForm({ ...templateForm, fields });
-                                }}
-                                className="w-4 h-4 rounded border-white/20 bg-[#252B3D] text-[#B9FF66]"
-                              />
-                              <span className="text-sm text-[#94A3B8]">Required</span>
-                            </label>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                const fields = templateForm.fields.filter((_, i) => i !== index);
-                                setTemplateForm({ ...templateForm, fields });
-                              }}
-                              className="ml-auto w-8 h-8 rounded-lg bg-[#C55050]/20 text-[#FF9B9B] flex items-center justify-center hover:bg-[#C55050]/30"
-                            >
-                              <X className="h-4 w-4" />
-                            </button>
-                          </div>
-                        </div>
-                        
-                        {field.type === 'select' && (
-                          <div className="mt-3">
-                            <label className="block text-xs text-[#64748B] mb-1">Options (comma separated)</label>
-                            <input
-                              type="text"
-                              value={field.options?.join(', ') || ''}
-                              onChange={(e) => {
-                                const fields = [...templateForm.fields];
-                                fields[index].options = e.target.value.split(',').map(o => o.trim());
-                                setTemplateForm({ ...templateForm, fields });
-                              }}
-                              className="input-dark w-full"
-                              placeholder="Option 1, Option 2, Option 3"
-                            />
-                          </div>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-
-              <div className="p-6 border-t border-white/10 flex justify-end gap-3">
-                <button
-                  onClick={() => setShowTemplateModal(false)}
-                  className="btn-dark"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={async () => {
-                    try {
-                      const response = await fetch('/api/bills/templates', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify(templateForm),
-                      });
-                      if (response.ok) {
-                        setShowTemplateModal(false);
-                        setTemplateForm({ name: '', description: '', fields: [] });
-                        fetchTemplates();
-                      }
-                    } catch (error) {
-                      console.error('Error creating template:', error);
-                    }
-                  }}
-                  className="btn-lime"
-                >
-                  Create Template
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-      </main>
-    </div>
+            ) : <EmptyState text="Open a bill preview." />}
+          </Panel>
+        </div>
+      </div>
+    </ERPShell>
   );
+}
+
+function Metric({ label, value, tone = 'neutral' }: { label: string; value: string | number; tone?: 'up' | 'down' | 'neutral' }) {
+  return <Panel><p className="text-sm text-[#6b7280]">{label}</p><p className={tone === 'up' ? 'mt-2 text-3xl font-bold text-[#1f8f4d]' : tone === 'down' ? 'mt-2 text-3xl font-bold text-[#b42318]' : 'mt-2 text-3xl font-bold'}>{value}</p></Panel>;
+}
+
+function Field({ value, onChange, type = 'text', placeholder, required }: { value: string; onChange: (value: string) => void; type?: string; placeholder?: string; required?: boolean }) {
+  return <input className="input-dark" value={value} onChange={(event) => onChange(event.target.value)} type={type} placeholder={placeholder} required={required} />;
+}
+
+function Select({ value, onChange, options, labels = {} }: { value: string; onChange: (value: string) => void; options: string[]; labels?: Record<string, string> }) {
+  return <select className="input-dark" value={value} onChange={(event) => onChange(event.target.value)}>{options.map((option) => <option key={option} value={option}>{labels[option] ?? option.replaceAll('_', ' ')}</option>)}</select>;
 }

@@ -2,24 +2,25 @@ import { NextRequest, NextResponse } from 'next/server';
 import connectDB from '@/lib/mongodb';
 import { Bill, BillTemplate } from '@/models/Bill';
 import { isDatabaseAvailable } from '@/lib/database';
+import { demoData } from '@/lib/demo-data';
 
 // GET /api/bills - Get all bills
 export async function GET(request: NextRequest) {
+  const { searchParams } = new URL(request.url);
+  const status = searchParams.get('status');
+  const templateId = searchParams.get('templateId');
+
   if (!(await isDatabaseAvailable())) {
     return NextResponse.json({
       success: true,
-      data: [],
+      data: demoData.listBills({ status, templateId }),
     });
   }
 
   try {
     await connectDB();
     
-    const { searchParams } = new URL(request.url);
-    const status = searchParams.get('status');
-    const templateId = searchParams.get('templateId');
-    
-    let query: any = {};
+    const query: any = {};
     if (status) query.status = status;
     if (templateId) query.templateId = templateId;
     
@@ -43,16 +44,17 @@ export async function GET(request: NextRequest) {
 
 // POST /api/bills - Create new bill
 export async function POST(request: NextRequest) {
+  const body = await request.json();
+
   if (!(await isDatabaseAvailable())) {
     return NextResponse.json(
-      { success: false, error: 'Database not available' },
-      { status: 503 }
+      { success: true, data: demoData.createBill(body) },
+      { status: 201 }
     );
   }
 
   try {
     await connectDB();
-    const body = await request.json();
     
     // Calculate totals
     const subtotal = body.items?.reduce((sum: number, item: any) => sum + item.total, 0) || 0;

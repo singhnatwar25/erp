@@ -1,3 +1,5 @@
+import fs from 'fs';
+import path from 'path';
 import { generateId } from '@/lib/utils';
 
 type DemoRecord = {
@@ -84,7 +86,54 @@ type BudgetRecord = DemoRecord & {
   categories: Array<{ name: string; allocated: number; spent: number }>;
 };
 
+type BillTemplateRecord = DemoRecord & {
+  name: string;
+  description?: string;
+  fields: Array<{
+    id: string;
+    name: string;
+    label: string;
+    type: string;
+    required: boolean;
+    options?: string[];
+    defaultValue?: string;
+    order: number;
+  }>;
+  isActive: boolean;
+};
+
+type BillRecord = DemoRecord & {
+  billId: string;
+  templateId: string;
+  templateName: string;
+  clientName: string;
+  clientEmail?: string;
+  clientPhone?: string;
+  clientAddress?: string;
+  billNumber: string;
+  issueDate: string;
+  dueDate: string;
+  status: 'draft' | 'sent' | 'paid' | 'overdue' | 'cancelled';
+  subtotal: number;
+  taxRate: number;
+  taxAmount: number;
+  total: number;
+  currency: string;
+  notes?: string;
+  items: Array<{ description: string; quantity: number; unitPrice: number; total: number }>;
+  customFields: Record<string, any>;
+};
+
 type ExtraRecord = DemoRecord & Record<string, any>;
+
+type LocalDatabase = {
+  employees: EmployeeRecord[];
+  projects: ProjectRecord[];
+  tasks: TaskRecord[];
+  transactions: TransactionRecord[];
+  budgets: BudgetRecord[];
+  extras: Record<string, ExtraRecord[]>;
+};
 
 const now = new Date('2026-05-04T12:00:00.000Z');
 
@@ -107,6 +156,39 @@ function publicId(prefix: string) {
 
 function clone<T>(value: T): T {
   return JSON.parse(JSON.stringify(value));
+}
+
+const localDatabasePath = path.join(process.cwd(), 'data', 'local-db.json');
+
+function readLocalDatabase(seed: LocalDatabase): LocalDatabase {
+  try {
+    if (!fs.existsSync(localDatabasePath)) {
+      fs.mkdirSync(path.dirname(localDatabasePath), { recursive: true });
+      fs.writeFileSync(localDatabasePath, JSON.stringify(seed, null, 2));
+      return seed;
+    }
+
+    const stored = JSON.parse(fs.readFileSync(localDatabasePath, 'utf8'));
+
+    return {
+      ...seed,
+      ...stored,
+      extras: {
+        ...seed.extras,
+        ...(stored.extras ?? {}),
+      },
+    };
+  } catch {
+    return seed;
+  }
+}
+
+function persistLocalDatabase() {
+  fs.mkdirSync(path.dirname(localDatabasePath), { recursive: true });
+  fs.writeFileSync(
+    localDatabasePath,
+    JSON.stringify({ employees, projects, tasks, transactions, budgets, extras }, null, 2)
+  );
 }
 
 function latestFirst<T extends { createdAt: string }>(items: T[]) {
@@ -141,12 +223,12 @@ let employees: EmployeeRecord[] = [
   {
     _id: 'demo-employee-1',
     employeeId: 'EMP-DEMO001',
-    firstName: 'Aarav',
-    lastName: 'Mehta',
-    email: 'aarav.mehta@example.com',
-    phone: '+1 555 0101',
+    firstName: 'Rohan',
+    lastName: 'Kapoor',
+    email: 'rohan.kapoor@freshworks-office.test',
+    phone: '+91 98765 0101',
     department: 'Engineering',
-    position: 'Senior Developer',
+    position: 'Product Engineer',
     status: 'active',
     joinDate: daysAgo(210),
     salary: 118000,
@@ -156,12 +238,12 @@ let employees: EmployeeRecord[] = [
   {
     _id: 'demo-employee-2',
     employeeId: 'EMP-DEMO002',
-    firstName: 'Priya',
-    lastName: 'Shah',
-    email: 'priya.shah@example.com',
-    phone: '+1 555 0102',
+    firstName: 'Ananya',
+    lastName: 'Rao',
+    email: 'ananya.rao@freshworks-office.test',
+    phone: '+91 98765 0102',
     department: 'Sales',
-    position: 'Account Executive',
+    position: 'Sales Manager',
     status: 'active',
     joinDate: daysAgo(42),
     salary: 92000,
@@ -171,12 +253,12 @@ let employees: EmployeeRecord[] = [
   {
     _id: 'demo-employee-3',
     employeeId: 'EMP-DEMO003',
-    firstName: 'Marcus',
-    lastName: 'Lee',
-    email: 'marcus.lee@example.com',
-    phone: '+1 555 0103',
+    firstName: 'Vikram',
+    lastName: 'Iyer',
+    email: 'vikram.iyer@freshworks-office.test',
+    phone: '+91 98765 0103',
     department: 'Finance',
-    position: 'Finance Manager',
+    position: 'Accounts Lead',
     status: 'active',
     joinDate: daysAgo(18),
     salary: 104000,
@@ -189,9 +271,9 @@ let projects: ProjectRecord[] = [
   {
     _id: 'demo-project-1',
     projectId: 'PRJ-DEMO001',
-    name: 'Atlas CRM Portal',
-    description: 'Customer portal and reporting workflow for a SaaS client.',
-    client: 'Atlas Labs',
+    name: 'Retail ERP Rollout',
+    description: 'Inventory, billing, and staff workflow setup for a retail chain.',
+    client: 'BrightMart Retail',
     status: 'in_progress',
     priority: 'high',
     startDate: daysAgo(55),
@@ -199,17 +281,17 @@ let projects: ProjectRecord[] = [
     budget: 185000,
     progress: 62,
     assignedEmployees: ['demo-employee-1', 'demo-employee-2'],
-    projectManager: 'Aarav Mehta',
-    technologies: ['Next.js', 'MongoDB', 'Tailwind CSS'],
+    projectManager: 'Rohan Kapoor',
+    technologies: ['Next.js', 'Local JSON DB', 'Tailwind CSS'],
     createdAt: daysAgo(55),
     updatedAt: daysAgo(1),
   },
   {
     _id: 'demo-project-2',
     projectId: 'PRJ-DEMO002',
-    name: 'Finance Automation',
-    description: 'Automated invoice capture and department budget reporting.',
-    client: 'Northwind Finance',
+    name: 'HR Attendance System',
+    description: 'Office attendance, leave tracking, and HR reporting.',
+    client: 'BluePeak Services',
     status: 'planning',
     priority: 'medium',
     startDate: daysAgo(8),
@@ -217,7 +299,7 @@ let projects: ProjectRecord[] = [
     budget: 96000,
     progress: 18,
     assignedEmployees: ['demo-employee-1', 'demo-employee-3'],
-    projectManager: 'Marcus Lee',
+    projectManager: 'Vikram Iyer',
     technologies: ['TypeScript', 'Node.js'],
     createdAt: daysAgo(8),
     updatedAt: daysAgo(1),
@@ -228,8 +310,8 @@ let tasks: TaskRecord[] = [
   {
     _id: 'demo-task-1',
     taskId: 'TSK-DEMO001',
-    title: 'Build customer activity dashboard',
-    description: 'Create the core dashboard cards and recent activity table.',
+    title: 'Prepare retail stock import screen',
+    description: 'Create the stock upload form and validation table.',
     project: projectSummary(projects[0]),
     assignedTo: employeeSummary(employees[0]),
     assignedBy: employeeSummary(employees[2]),
@@ -240,18 +322,18 @@ let tasks: TaskRecord[] = [
     estimatedHours: 24,
     actualHours: 9,
     timeEntries: [
-      { date: daysAgo(3), hours: 4, description: 'Dashboard layout' },
-      { date: daysAgo(1), hours: 5, description: 'API integration' },
+      { date: daysAgo(3), hours: 4, description: 'Upload layout' },
+      { date: daysAgo(1), hours: 5, description: 'Validation rules' },
     ],
-    tags: ['frontend', 'dashboard'],
+    tags: ['frontend', 'inventory'],
     createdAt: daysAgo(9),
     updatedAt: daysAgo(1),
   },
   {
     _id: 'demo-task-2',
     taskId: 'TSK-DEMO002',
-    title: 'Review invoice category model',
-    description: 'Confirm required fields for automated budget allocation.',
+    title: 'Create leave approval checklist',
+    description: 'Confirm approval states and required HR fields.',
     project: projectSummary(projects[1]),
     assignedTo: employeeSummary(employees[2]),
     assignedBy: employeeSummary(employees[0]),
@@ -275,7 +357,7 @@ let transactions: TransactionRecord[] = [
     type: 'income',
     category: 'Revenue',
     amount: 45000,
-    description: 'Atlas milestone payment',
+    description: 'BrightMart rollout advance',
     date: daysAgo(6),
     paymentMethod: 'bank_transfer',
     status: 'completed',
@@ -288,7 +370,7 @@ let transactions: TransactionRecord[] = [
     type: 'expense',
     category: 'Software',
     amount: 4200,
-    description: 'Cloud and developer tooling',
+    description: 'Office software subscriptions',
     date: daysAgo(4),
     paymentMethod: 'credit_card',
     status: 'completed',
@@ -348,20 +430,20 @@ let extras: Record<string, ExtraRecord[]> = {
     {
       _id: 'demo-client-1',
       clientId: 'CLI-DEMO001',
-      companyName: 'Atlas Labs',
+      companyName: 'BrightMart Retail',
       contactPerson: {
-        firstName: 'Nina',
-        lastName: 'Patel',
-        email: 'nina.patel@atlas.example.com',
-        phone: '+1 555 0201',
-        designation: 'Operations Director',
+        firstName: 'Kavya',
+        lastName: 'Menon',
+        email: 'kavya.menon@brightmart.test',
+        phone: '+91 98765 0201',
+        designation: 'Operations Head',
       },
-      industry: 'SaaS',
-      website: 'https://atlas.example.com',
+      industry: 'Retail',
+      website: 'https://brightmart.test',
       status: 'active',
       leadSource: 'referral',
       assignedTo: employeeSummary(employees[1]),
-      notes: 'Demo client used when MongoDB is unavailable.',
+      notes: 'Fresh sample client for regular office ERP testing.',
       createdAt: daysAgo(70),
       updatedAt: daysAgo(4),
     },
@@ -370,11 +452,11 @@ let extras: Record<string, ExtraRecord[]> = {
     {
       _id: 'demo-deal-1',
       dealId: 'DL-DEMO001',
-      title: 'Atlas support expansion',
+      title: 'BrightMart phase two rollout',
       client: {
         _id: 'demo-client-1',
-        companyName: 'Atlas Labs',
-        contactPerson: { firstName: 'Nina', lastName: 'Patel' },
+        companyName: 'BrightMart Retail',
+        contactPerson: { firstName: 'Kavya', lastName: 'Menon' },
       },
       value: 78000,
       currency: 'USD',
@@ -390,14 +472,14 @@ let extras: Record<string, ExtraRecord[]> = {
     {
       _id: 'demo-asset-1',
       assetId: 'AST-DEMO001',
-      name: 'MacBook Pro 14',
+      name: 'Dell Latitude 7440',
       type: 'laptop',
-      brand: 'Apple',
-      model: 'M3 Pro',
-      serialNumber: 'DEMO-AST-001',
+      brand: 'Dell',
+      model: 'Latitude 7440',
+      serialNumber: 'FRESH-AST-001',
       purchaseDate: daysAgo(120),
-      purchasePrice: 2499,
-      vendor: 'Apple Business',
+      purchasePrice: 1450,
+      vendor: 'Office Hardware Hub',
       status: 'active',
       assignedTo: employeeSummary(employees[0]),
       location: 'Engineering',
@@ -411,8 +493,8 @@ let extras: Record<string, ExtraRecord[]> = {
       invoiceId: 'INV-DEMO001',
       client: {
         _id: 'demo-client-1',
-        companyName: 'Atlas Labs',
-        contactPerson: { firstName: 'Nina', lastName: 'Patel' },
+        companyName: 'BrightMart Retail',
+        contactPerson: { firstName: 'Kavya', lastName: 'Menon' },
       },
       project: projectSummary(projects[0]),
       invoiceNumber: 'INV-2026-001',
@@ -424,18 +506,63 @@ let extras: Record<string, ExtraRecord[]> = {
       updatedAt: daysAgo(6),
     },
   ],
+  billTemplates: [
+    {
+      _id: 'default-template',
+      name: 'Standard Invoice',
+      description: 'Default office invoice template',
+      isActive: true,
+      fields: [
+        { id: 'clientName', name: 'clientName', label: 'Client Name', type: 'text', required: true, order: 1 },
+        { id: 'clientEmail', name: 'clientEmail', label: 'Client Email', type: 'email', required: false, order: 2 },
+        { id: 'clientPhone', name: 'clientPhone', label: 'Client Phone', type: 'phone', required: false, order: 3 },
+        { id: 'clientAddress', name: 'clientAddress', label: 'Client Address', type: 'address', required: false, order: 4 },
+        { id: 'billNumber', name: 'billNumber', label: 'Invoice Number', type: 'text', required: true, order: 5 },
+        { id: 'issueDate', name: 'issueDate', label: 'Issue Date', type: 'date', required: true, order: 6 },
+        { id: 'dueDate', name: 'dueDate', label: 'Due Date', type: 'date', required: true, order: 7 },
+        { id: 'taxRate', name: 'taxRate', label: 'Tax Rate (%)', type: 'number', required: false, order: 8 },
+        { id: 'notes', name: 'notes', label: 'Notes', type: 'textarea', required: false, order: 9 },
+      ],
+      createdAt: daysAgo(90),
+      updatedAt: daysAgo(90),
+    },
+  ],
+  bills: [
+    {
+      _id: 'demo-bill-1',
+      billId: 'BILL-DEMO001',
+      templateId: 'default-template',
+      templateName: 'Standard Invoice',
+      clientName: 'BrightMart Retail',
+      clientEmail: 'accounts@brightmart.test',
+      billNumber: 'INV-FRESH-001',
+      issueDate: daysAgo(6),
+      dueDate: daysAgo(-24),
+      status: 'sent',
+      subtotal: 45000,
+      taxRate: 0,
+      taxAmount: 0,
+      total: 45000,
+      currency: 'USD',
+      notes: 'Initial invoice for retail ERP rollout.',
+      items: [{ description: 'Retail ERP implementation advance', quantity: 1, unitPrice: 45000, total: 45000 }],
+      customFields: {},
+      createdAt: daysAgo(6),
+      updatedAt: daysAgo(6),
+    },
+  ],
   communications: [
     {
       _id: 'demo-communication-1',
       client: {
         _id: 'demo-client-1',
-        companyName: 'Atlas Labs',
-        contactPerson: { firstName: 'Nina', lastName: 'Patel' },
+        companyName: 'BrightMart Retail',
+        contactPerson: { firstName: 'Kavya', lastName: 'Menon' },
       },
       employee: employeeSummary(employees[1]),
       type: 'email',
-      subject: 'Project milestone review',
-      notes: 'Shared sprint progress and next delivery dates.',
+      subject: 'ERP rollout kickoff',
+      notes: 'Confirmed rollout scope, owners, and first delivery dates.',
       date: daysAgo(2),
       createdAt: daysAgo(2),
       updatedAt: daysAgo(2),
@@ -449,7 +576,7 @@ let extras: Record<string, ExtraRecord[]> = {
       status: 'present',
       checkIn: daysAgo(1),
       workingHours: 8,
-      notes: 'Demo attendance entry.',
+      notes: 'Fresh office attendance entry.',
       createdAt: daysAgo(1),
       updatedAt: daysAgo(1),
     },
@@ -475,32 +602,17 @@ let extras: Record<string, ExtraRecord[]> = {
 };
 
 declare global {
-  var erpDemoData:
-    | {
-        employees: EmployeeRecord[];
-        projects: ProjectRecord[];
-        tasks: TaskRecord[];
-        transactions: TransactionRecord[];
-        budgets: BudgetRecord[];
-        extras: Record<string, ExtraRecord[]>;
-      }
-    | undefined;
+  var erpDemoData: LocalDatabase | undefined;
 }
 
 if (!globalThis.erpDemoData) {
-  globalThis.erpDemoData = {
-    employees,
-    projects,
-    tasks,
-    transactions,
-    budgets,
-    extras,
-  };
+  globalThis.erpDemoData = readLocalDatabase({ employees, projects, tasks, transactions, budgets, extras });
 }
 
-if (!globalThis.erpDemoData.extras) {
-  globalThis.erpDemoData.extras = extras;
-}
+globalThis.erpDemoData.extras = {
+  ...extras,
+  ...(globalThis.erpDemoData.extras ?? {}),
+};
 
 employees = globalThis.erpDemoData.employees;
 projects = globalThis.erpDemoData.projects;
@@ -566,6 +678,30 @@ function extraIdField(collection: string) {
   return fields[collection];
 }
 
+function calculateBill(input: Record<string, any>, existing?: Partial<BillRecord>) {
+  const items = (input.items ?? existing?.items ?? []).map((item: any) => {
+    const quantity = Number(item.quantity ?? 0);
+    const unitPrice = Number(item.unitPrice ?? 0);
+    return {
+      description: item.description ?? '',
+      quantity,
+      unitPrice,
+      total: Number(item.total ?? quantity * unitPrice),
+    };
+  });
+  const taxRate = Number(input.taxRate ?? existing?.taxRate ?? 0);
+  const subtotal = items.reduce((sum: number, item: any) => sum + Number(item.total ?? 0), 0);
+  const taxAmount = (subtotal * taxRate) / 100;
+
+  return {
+    items,
+    taxRate,
+    subtotal,
+    taxAmount,
+    total: subtotal + taxAmount,
+  };
+}
+
 export const demoData = {
   listEmployees(filters: { department?: string | null; status?: string | null }) {
     return clone(
@@ -601,6 +737,7 @@ export const demoData = {
     };
 
     employees.unshift(employee);
+    persistLocalDatabase();
     return clone(employee);
   },
 
@@ -609,6 +746,7 @@ export const demoData = {
     if (!existing) return null;
     const updated = updateTimestamp({ ...existing, ...input, salary: Number(input.salary ?? existing.salary) });
     employees.splice(employees.findIndex((employee) => employee._id === id), 1, updated);
+    persistLocalDatabase();
     return clone(updated);
   },
 
@@ -616,6 +754,7 @@ export const demoData = {
     const existing = employees.find((employee) => employee._id === id);
     if (!existing) return null;
     employees.splice(employees.findIndex((employee) => employee._id === id), 1);
+    persistLocalDatabase();
     return clone(existing);
   },
 
@@ -656,6 +795,7 @@ export const demoData = {
     };
 
     projects.unshift(project);
+    persistLocalDatabase();
     return clone(project);
   },
 
@@ -669,6 +809,7 @@ export const demoData = {
       progress: Number(input.progress ?? existing.progress),
     });
     projects.splice(projects.findIndex((project) => project._id === id), 1, updated);
+    persistLocalDatabase();
     return clone(updated);
   },
 
@@ -676,6 +817,7 @@ export const demoData = {
     const existing = projects.find((project) => project._id === id);
     if (!existing) return null;
     projects.splice(projects.findIndex((project) => project._id === id), 1);
+    persistLocalDatabase();
     return clone(existing);
   },
 
@@ -699,6 +841,7 @@ export const demoData = {
   createTask(input: any) {
     const task = normalizeTask(input);
     tasks.unshift(task);
+    persistLocalDatabase();
     return clone(task);
   },
 
@@ -713,6 +856,7 @@ export const demoData = {
       createdAt: existing.createdAt,
     });
     tasks.splice(tasks.findIndex((task) => task._id === id), 1, updated);
+    persistLocalDatabase();
     return clone(updated);
   },
 
@@ -720,6 +864,7 @@ export const demoData = {
     const existing = tasks.find((task) => task._id === id);
     if (!existing) return null;
     tasks.splice(tasks.findIndex((task) => task._id === id), 1);
+    persistLocalDatabase();
     return clone(existing);
   },
 
@@ -738,6 +883,7 @@ export const demoData = {
       actualHours: timeEntries.reduce((sum, entry) => sum + entry.hours, 0),
     });
     tasks.splice(tasks.findIndex((task) => task._id === input.taskId), 1, updated);
+    persistLocalDatabase();
     return clone(updated);
   },
 
@@ -808,6 +954,7 @@ export const demoData = {
     };
 
     transactions.unshift(transaction);
+    persistLocalDatabase();
     return clone(transaction);
   },
 
@@ -820,6 +967,7 @@ export const demoData = {
       amount: Number(input.amount ?? existing.amount),
     });
     transactions.splice(transactions.findIndex((transaction) => transaction._id === id), 1, updated);
+    persistLocalDatabase();
     return clone(updated);
   },
 
@@ -827,6 +975,7 @@ export const demoData = {
     const existing = transactions.find((transaction) => transaction._id === id);
     if (!existing) return null;
     transactions.splice(transactions.findIndex((transaction) => transaction._id === id), 1);
+    persistLocalDatabase();
     return clone(existing);
   },
 
@@ -867,6 +1016,7 @@ export const demoData = {
     };
 
     budgets.unshift(budget);
+    persistLocalDatabase();
     return clone(budget);
   },
 
@@ -883,6 +1033,7 @@ export const demoData = {
       remainingAmount: Number(input.remainingAmount ?? allocatedAmount - spentAmount),
     });
     budgets.splice(budgets.findIndex((budget) => budget._id === id), 1, updated);
+    persistLocalDatabase();
     return clone(updated);
   },
 
@@ -890,6 +1041,7 @@ export const demoData = {
     const existing = budgets.find((budget) => budget._id === id);
     if (!existing) return null;
     budgets.splice(budgets.findIndex((budget) => budget._id === id), 1);
+    persistLocalDatabase();
     return clone(existing);
   },
 
@@ -1013,8 +1165,8 @@ export const demoData = {
           name: m.employee ? `${m.employee.firstName} ${m.employee.lastName}` : 'Unknown',
           avatar: m.employee?.avatar,
         })) || [
-          { name: 'John Doe', avatar: null },
-          { name: 'Jane Smith', avatar: null },
+          { name: 'Rohan Kapoor', avatar: null },
+          { name: 'Ananya Rao', avatar: null },
         ],
         extraMembers: Math.max(0, (p.team?.length || 2) - 3),
       })),
@@ -1057,6 +1209,7 @@ export const demoData = {
     }
 
     extras[collection].unshift(record);
+    persistLocalDatabase();
     return clone(record);
   },
 
@@ -1072,6 +1225,7 @@ export const demoData = {
       createdAt: records[index].createdAt,
     });
     records.splice(index, 1, updated);
+    persistLocalDatabase();
     return clone(updated);
   },
 
@@ -1081,6 +1235,114 @@ export const demoData = {
     if (index === -1) return null;
 
     const [deleted] = records.splice(index, 1);
+    persistLocalDatabase();
+    return clone(deleted);
+  },
+
+  listBillTemplates() {
+    const templates = (extras.billTemplates ?? []) as BillTemplateRecord[];
+    return clone(latestFirst(templates).filter((template) => template.isActive !== false));
+  },
+
+  createBillTemplate(input: Record<string, any>) {
+    if (!extras.billTemplates) {
+      extras.billTemplates = [];
+    }
+
+    const template: BillTemplateRecord = {
+      _id: nextId(),
+      name: input.name,
+      description: input.description ?? '',
+      fields: input.fields ?? [],
+      isActive: input.isActive ?? true,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+
+    extras.billTemplates.unshift(template);
+    persistLocalDatabase();
+    return clone(template);
+  },
+
+  listBills(filters: { status?: string | null; templateId?: string | null } = {}) {
+    const bills = (extras.bills ?? []) as BillRecord[];
+    return clone(
+      latestFirst(
+        bills.filter((bill) => {
+          if (filters.status && bill.status !== filters.status) return false;
+          if (filters.templateId && bill.templateId !== filters.templateId) return false;
+          return true;
+        })
+      )
+    );
+  },
+
+  getBill(id: string) {
+    const bills = (extras.bills ?? []) as BillRecord[];
+    return clone(bills.find((bill) => bill._id === id) ?? null);
+  },
+
+  createBill(input: Record<string, any>) {
+    if (!extras.bills) {
+      extras.bills = [];
+    }
+
+    const templates = (extras.billTemplates ?? []) as BillTemplateRecord[];
+    const template = templates.find((item) => item._id === input.templateId) ?? templates[0];
+    const totals = calculateBill(input);
+    const bill: BillRecord = {
+      _id: nextId(),
+      billId: publicId('BILL'),
+      templateId: input.templateId || template?._id || 'default-template',
+      templateName: template?.name || input.templateName || 'Standard Invoice',
+      clientName: input.clientName,
+      clientEmail: input.clientEmail,
+      clientPhone: input.clientPhone,
+      clientAddress: input.clientAddress,
+      billNumber: input.billNumber || publicId('INV'),
+      issueDate: input.issueDate || new Date().toISOString(),
+      dueDate: input.dueDate || new Date().toISOString(),
+      status: input.status ?? 'draft',
+      currency: input.currency ?? 'USD',
+      notes: input.notes ?? '',
+      customFields: input.customFields ?? {},
+      ...totals,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+
+    extras.bills.unshift(bill);
+    persistLocalDatabase();
+    return clone(bill);
+  },
+
+  updateBill(id: string, input: Record<string, any>) {
+    const bills = (extras.bills ?? []) as BillRecord[];
+    const index = bills.findIndex((bill) => bill._id === id);
+    if (index === -1) return null;
+
+    const totals = calculateBill(input, bills[index]);
+    const updated = updateTimestamp({
+      ...bills[index],
+      ...input,
+      ...totals,
+      _id: bills[index]._id,
+      billId: bills[index].billId,
+      createdAt: bills[index].createdAt,
+    });
+
+    bills.splice(index, 1, updated);
+    persistLocalDatabase();
+    return clone(updated);
+  },
+
+  deleteBill(id: string) {
+    const bills = (extras.bills ?? []) as BillRecord[];
+    const index = bills.findIndex((bill) => bill._id === id);
+    if (index === -1) return null;
+
+    const [deleted] = bills.splice(index, 1);
+    persistLocalDatabase();
     return clone(deleted);
   },
 };

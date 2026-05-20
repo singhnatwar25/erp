@@ -2,15 +2,20 @@ import { NextRequest, NextResponse } from 'next/server';
 import connectDB from '@/lib/mongodb';
 import { Bill } from '@/models/Bill';
 import { isDatabaseAvailable } from '@/lib/database';
+import { demoData } from '@/lib/demo-data';
 
 // GET /api/bills/[id] - Get single bill
 export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   if (!(await isDatabaseAvailable())) {
-    return NextResponse.json(
-      { success: false, error: 'Database not available' },
-      { status: 503 }
-    );
+    const bill = demoData.getBill(id);
+    if (!bill) {
+      return NextResponse.json(
+        { success: false, error: 'Bill not found' },
+        { status: 404 }
+      );
+    }
+    return NextResponse.json({ success: true, data: bill });
   }
 
   try {
@@ -43,16 +48,21 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
 // PUT /api/bills/[id] - Update bill
 export async function PUT(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
+  const body = await request.json();
+
   if (!(await isDatabaseAvailable())) {
-    return NextResponse.json(
-      { success: false, error: 'Database not available' },
-      { status: 503 }
-    );
+    const bill = demoData.updateBill(id, body);
+    if (!bill) {
+      return NextResponse.json(
+        { success: false, error: 'Bill not found' },
+        { status: 404 }
+      );
+    }
+    return NextResponse.json({ success: true, data: bill });
   }
 
   try {
     await connectDB();
-    const body = await request.json();
     
     // Recalculate totals if items or tax rate changed
     if (body.items || body.taxRate !== undefined) {
@@ -99,10 +109,14 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
 export async function DELETE(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   if (!(await isDatabaseAvailable())) {
-    return NextResponse.json(
-      { success: false, error: 'Database not available' },
-      { status: 503 }
-    );
+    const bill = demoData.deleteBill(id);
+    if (!bill) {
+      return NextResponse.json(
+        { success: false, error: 'Bill not found' },
+        { status: 404 }
+      );
+    }
+    return NextResponse.json({ success: true, message: 'Bill deleted successfully' });
   }
 
   try {
